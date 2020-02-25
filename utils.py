@@ -67,6 +67,10 @@ def print_zone(zone, cls=False):
         clear()
     for idx, row in enumerate(zone.get_grid()):
         row = list(row)
+        for staircase in zone.staircases:
+            x, y = staircase.get_coords(zone.id)
+            if y == idx:
+                row[x] = staircase.get_icon(zone.id)
         for ent in zone.units:
             if type(ent) is tuple:
                 # TODO remove this block when it's clear it won't be needed

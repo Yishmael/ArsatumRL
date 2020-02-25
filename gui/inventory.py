@@ -10,10 +10,11 @@ class State:
     ITEM_USED = 2
 
 class Inventory(Pane):
-    def __init__(self, world, items=[]):
+    def __init__(self, unit, items=[]):
         super(Inventory, self).__init__(32, 8)
+        self.unit = unit
         self._items = list(items)
-        self.world = world
+        self.shown = False
         self.state = State.DEFAULT
         self.selected_item = None
         self.scroll_y = 0
@@ -22,12 +23,9 @@ class Inventory(Pane):
         return ', '.join(item.name for item in self._items)
 
     def remove_item(self, item):
-        if item not in self._items:
-            raise ValueError(f'{item} can\'t be removed.')
         self._items.remove(item)
 
     def add_item(self, item):
-        self.world.log.add_message(f'You pick up {item}.')
         self._items.append(item)
 
     def add_items(self, items):
@@ -44,10 +42,10 @@ class Inventory(Pane):
                 if item.refillable() and not item.full():
                     name = item.name
                     item.fill(value)
-                    self.world.log.add_message(f'You fill {name} with {value}.')
+                    self.unit.zone.add_message(f'You fill {name} with {value}.')
                     break
             else:
-                self.world.log.add_message('You wash your face in the fountain.')
+                self.unit.zone.add_message('You wash your face in the fountain.')
     
     @property
     def items(self):
@@ -85,14 +83,15 @@ class Inventory(Pane):
     def recv_key(self, key):
         if self.state == State.DEFAULT:
             if key == 'i':
-                self.world.show_inv = False
+                self.shown = False
             elif key == 'down':
                 self.scroll_y = min(max(0, len(self._items)-self.h+4), self.scroll_y+1)
             elif key == 'up':
                 self.scroll_y = max(0, self.scroll_y-1)
             elif key == 'enter':
                 self._items.clear()
-                self.world.log.add_message('Backpack cleared.')
+                self.scroll_y = 0
+                self.unit.zone.add_message('Backpack cleared.')
             else:
                 self.select(key)
         elif self.state == State.ITEM_SELECTED:
@@ -101,71 +100,72 @@ class Inventory(Pane):
             if key in self.selected_item.actions.keys():
                 action = self.selected_item.actions[key]
                 if action == 'drop':
-                    self.world.log.add_message(f'You drop {self.selected_item}.')
-                    self._items.remove(self.selected_item)
-                    x, y = self.world.player.x, self.world.player.y
-                    self.world.place(self.selected_item, x, y)
-                    self.selected_item = None
-                    self.state = State.DEFAULT
-                elif action == 'spill':
-                    self.world.log.add_message(f'You spill {self.selected_item} on the ground.')
-                    content = self.selected_item.get_content()
-                    self.selected_item.quantity = 0
-                    x, y = self.world.player.x, self.world.player.y
-                    self.world.place(content, x, y)
+                    self.unit.zone.add_message(f'You drop {self.selected_item}.')
+                    self.remove_item(self.selected_item)
+                    self.selected_item.x, self.selected_item.y = self.unit.x, self.unit.y
+                    self.unit.zone.place_item(self.selected_item, False)
                     self.selected_item = None
                     self.state = State.DEFAULT
                 elif action == 'examine':
-                    self.world.log.add_message(self.selected_item.get_info())
+                    self.unit.zone.add_message(self.selected_item.get_info())
                     self.selected_item = None
                     self.state = State.DEFAULT
                 elif action == 'equip':
-                    self.world.log.add_message(f'You equip {self.selected_item}.')
-                    self.world.char_pane.equip(self.selected_item)
-                    self._items.remove(self.selected_item)
+                    self.unit.zone.add_message(f'You equip {self.selected_item}.')
+                    self.unit.char_pane.equip(self.selected_item)
+                    self.remove_item(self.selected_item)
                     self.selected_item = None
                     self.state = State.DEFAULT
                 elif action == 'eat':
-                    self.world.log.add_message(f'You eat {self.selected_item}.')
-                    self.selected_item.affect(self.world.player)
-                    self._items.remove(self.selected_item)
+                    self.unit.zone.add_message(f'You eat {self.selected_item}.')
+                    self.selected_item.affect_unit(self.unit)
+                    self.remove_item(self.selected_item)
                     self.selected_item = None
                     self.state = State.DEFAULT
                 elif action == 'drink':
-                    self.world.log.add_message(f'You drink {self.selected_item}.')
-                    self.selected_item.affect(self.world.player)
+                    self.unit.zone.add_message(f'You drink {self.selected_item}.')
+                    self.selected_item.affect_unit(self.unit)
                     self.selected_item.quantity -= 1
                     self.selected_item = None
                     self.state = State.DEFAULT
+                elif action == 'spill':
+                    self.unit.zone.add_message(f'You spill {self.selected_item} on the ground.')
+                    content = self.selected_item.get_content()
+                    self.selected_item.quantity = 0
+                    content.x, content.y = self.unit.x, self.unit.y
+                    self.unit.zone.place_item(content, False)
+                    self.selected_item = None
+                    self.state = State.DEFAULT
                 elif action == 'throw':
-                    self.world.log.add_message(f'Throw {self.selected_item} in which direction?')
+                    self.unit.zone.add_message(f'Throw {self.selected_item} in which direction?')
                     self.state = State.ITEM_USED
                 elif action == 'read': # TODO combine read and drink and eat
-                    self.world.log.add_message('The written words fade as you read them.')
-                    self.selected_item.affect(self.world.player)
+                    self.unit.zone.add_message('The written words fade as you read them.')
+                    self.selected_item.affect_unit(self.unit)
                     self.selected_item.quantity -= 1
                     self.selected_item = None
                     self.state = State.DEFAULT
             else:
-                self.world.log.add_message('Action cancelled.')
+                self.unit.zone.add_message('Action cancelled.')
                 self.selected_item = None
                 self.state = State.DEFAULT
         elif self.state == State.ITEM_USED:
-            if key in ['up', 'left', 'down', 'right']:
+            if key in ['home', 'up', 'page_up', 'left', 'right', 'end', 'down', 'page_down']:
                 action = self.selected_item.actions['t'] # TODO get the actual action
                 if action == 'throw':
-                    self._items.remove(self.selected_item)
-                    x, y = self.world.player.x, self.world.player.y
-                    self.world.log.add_message(f'You throw {self.selected_item}.')
+                    self.remove_item(self.selected_item)
+                    x, y = self.unit.x, self.unit.y
+                    self.unit.zone.add_message(f'You throw {self.selected_item}.')
                     # TODO update the item instead of spawning new
                     # and display a message that item broke
                     # call method to break the item, making it contain the pieces
                     for item in self.selected_item.get_broken():
-                        self.world.place(item, x+get_dir(key)[0]*4, y+get_dir(key)[1]*4)
+                        item.x, item.y = x+get_dir(key)[0]*4, y+get_dir(key)[1]*4
+                        self.unit.zone.place_item(item, False)
                     self.selected_item = None
                     self.state = State.DEFAULT
             else:
-                self.world.log.add_message('Action cancelled.')
+                self.unit.zone.add_message('Action cancelled.')
                 self.selected_item = None
                 self.state = State.DEFAULT
 
@@ -179,6 +179,6 @@ class Inventory(Pane):
         item = self._items[idx]
         self.selected_item = item
         if item.actions:
-            self.world.log.add_message(item.select_text)
+            self.unit.zone.add_message(item.select_text)
             self.state = State.ITEM_SELECTED
     

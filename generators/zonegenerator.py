@@ -7,6 +7,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils import sign, get_direction, clear, print_zone, WIDTH, HEIGHT
 from objects import Creature
+from item import Item
 
 class ZoneGenerator:
     def __init__(self, width, height, temperature=5):
@@ -23,7 +24,7 @@ class ZoneGenerator:
             if self.zone.get_tile_at(x, y) != '.':
                 continue
             if len(self.zone.units) < 3:
-                self.zone.units.append(('cave bat', x, y))
+                self.zone.place_unit_by_name('cave bat', x, y)
 
     def _place_items(self):
         x_range = list(range(WIDTH))
@@ -33,7 +34,8 @@ class ZoneGenerator:
             if self.zone.get_tile_at(x, y) != '.':
                 continue
             if len(self.zone.items) < 3:
-                self.zone.place_item('stick', x, y)
+                name = random.choice(['hearty meal', 'stick', 'shovel'])
+                self.zone.place_item(Item(name, x, y))
 
     def generate(self, stairs_up, stairs_down):
         raise NotImplementedError(self)

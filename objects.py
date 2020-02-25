@@ -1,36 +1,34 @@
 import random
 from collections import defaultdict
 
-from utils import sign, distance_between_points, get_direction, WIDTH, HEIGHT, get_icon, within_bounds
+from utils import sign, distance_between_points, get_direction, WIDTH, HEIGHT, get_icon, within_bounds, distance_between
 from gui.inventory import Inventory
+from gui.charpane import CharPane
 from item import Item
 
 class GameObject:
-    def __init__(self, world, name, x, y, zone_id, items=[]):
-        self.world = world
+    def __init__(self, zone, name, x, y, items=[]):
+        self.zone = zone
         self.name = name
         self.icon = get_icon(self.name)
         self.x = x
         self.y = y
         self.just_moved = True
-        # TODO load starting temperature elsewhere
-        # TODO fix temperature of items resetting to zone temp immediately after dropping
-        self.temperature = world.zones[zone_id].temperature
-        for item in items:
-            item.temperature = self.temperature
-        self.inv = Inventory(world, items)
+        self.temperature = 20
+        self.inv = Inventory(self, items)
+        self._events = []
 
     # def __repr__(self):
     #     return self.icon
 
-    # def __str__(self):
-    #     return self.name
+    def __str__(self):
+        return self.name
             
     def sees(self, o):
         return True or self.x == o.x or self.y == o.y
 
     def walkable(self, tile):
-        return tile in ['.', '>', '<']
+        return tile in ['.']
 
     def has_just_moved(self):
         just_moved = self.just_moved
@@ -40,32 +38,37 @@ class GameObject:
     def can_move_to(self, x, y):
         if not within_bounds(x, y):
             return False
-        tile = self.world.zone.get_tile_at(x, y)
+        tile = self.zone.get_tile_at(x, y)
         if not self.walkable(tile):
             if tile == '#':
                 if self.icon == '@':
                     pass #'You flatten yourself against the wall'
-            if tile == '_':
+            elif tile == '_':
                 self.inv.recv('refill water')
             return False
-        for u in self.world.zone.units:
+        for u in self.zone.units:
             if u is self:
                 continue
             if (u.x, u.y) == (x, y):
                 return False
         return True
     
+    def get_events(self):
+        events = list(self._events)
+        self._events.clear()
+        return events
+       
     # TODO use the formula with equilibrium
-    # NOTE raised OverflowError (zone temp was -15)
+    # TODO take clothes worn into account
     def update_temperature(self, ambient_temperature):
-        self.temperature = self.temperature * 1.00001**((ambient_temperature - self.temperature))
+        self.temperature += (ambient_temperature - self.temperature) * 0.0001
         for item in self.inv.items:
-            item.temperature = item.temperature * 1.001**((self.temperature - item.temperature))
-
+            item.update_temperature(self.temperature)
+            
 
 class Creature(GameObject):
-    def __init__(self, world, name, x, y, zone_id, items):
-        super(Creature, self).__init__(world, name, x, y, zone_id, items)
+    def __init__(self, zone, name, x, y, items):
+        super(Creature, self).__init__(zone, name, x, y, items)
         self.org_x = x
         self.org_y = y
         self.exp = 0
@@ -79,6 +82,7 @@ class Creature(GameObject):
         self._water = 5
         self.modifiers = []
         self._base_damage = 0
+        self.char_pane = CharPane(self)
         if self.icon == '@':
             self._hp = 30
             self._base_damage = 1
@@ -128,7 +132,7 @@ class Creature(GameObject):
             self.interact_with(self.x + dx, self.y + dy)
 
     def interact_with(self, x, y):
-        for u in self.world.zone.units:
+        for u in self.zone.units:
             if (u.x, u.y) == (x, y):
                 # preventing units from attacking each other
                 if '@' in [self.icon, u.icon]:
@@ -136,49 +140,73 @@ class Creature(GameObject):
                 break
         if not within_bounds(x, y):
             return
-        tile = self.world.zone.get_tile_at(x, y)
+        tile = self.zone.get_tile_at(x, y)
 
         if self.icon == '@' and tile.isdigit():
-            self.world.show_shop = True
+            self.show_shop = True
+
+    def tick(self):
+        # self.temperature += (37 - self.temperature) * 0.01
+        if 'poisoned' in self.statuses:
+            self.food -= 0.1 * (1 - self.resistance.poison)
+            self.water -= 0.2 * (1 - self.resistance.poison)
+        if 'bleeding' in self.statuses:
+            self.hp -= 0.1 + self.statuses['bleeding']/100
+        self.stamina += 0.1
+        for status, duration in list(self.statuses.items()):
+            self.statuses[status] -= 1
+            if duration <= 0:
+                del self.statuses[status]
+
+        if self.icon != '@':
+            if distance_between(self, self.zone.player) <= self.vision_distance and \
+                    self.sees(self.zone.player):
+                self.move_toward_object(self.zone.player)
+                if random.random() < 0.05:
+                    self.move_delta(random.randint(-1, 1), random.randint(-1, 1))
+            else:
+                pass # self.move_idle()     
             
     def attack(self, u):
         blocked = random.random() < u.block/10
         if self.icon == '@':
             if blocked:
-                self.world.log.add_message(f'{u} blocks your attack.')
+                self.zone.add_message(f'{u} blocks your attack.')
             else:
                 u.hp -= self.damage
-                hands_items = self.world.char_pane.get_items_at_slot('weapons/shields')
+                hands_items = self.char_pane.get_items_at_slot('weapons/shields')
                 if len(hands_items) > 0:
-                    self.world.log.add_message(f'You hit {u} with {random.choice(hands_items)}.')
+                    self.zone.add_message(f'You hit {u} with {random.choice(hands_items)}.')
                 else:
-                    self.world.log.add_message(f'You punch {u}.')
+                    self.zone.add_message(f'You punch {u}.')
         elif u.icon == '@':
             if blocked:
-                self.world.log.add_message(f'You block {self}\'s attack.')
+                self.zone.add_message(f'You block {self}\'s attack.')
             else:
                 u.hp -= self.damage
-                self.world.log.add_message(f'{self} scratches you.')
+                self.zone.add_message(f'{self} scratches you.')
+                if self.icon == 'C':
+                    if random.random() < 1.1:
+                        u.add_status('bleeding')
         if u.hp <= 0:
             self.exp += u.exp_reward
         self.stamina -= 1
 
     def pickup(self):
-        new_items = []
-        if self.icon != '@':
-            return
-        for o in list(self.world.zone.items):
-            if (o.x, o.y) == (self.x, self.y):
-                ground_items = o.inv.items
-                for item in ground_items:
-                    if not item.collectable():
-                        continue
-                    new_items.append(item)
-                    o.inv.remove_item(item)
-            if o.inv.is_empty():
-                self.world.zone.items.remove(o)
-        if new_items:
-            self.inv.add_items(new_items)
+        for item in list(self.zone.items):
+            if (item.x, item.y) == (self.x, self.y):
+                if not item.collectable():
+                    continue
+                self.zone.items.remove(item)
+                self.inv.add_item(item)
+                if self.icon == '@':
+                    self.zone.add_message(f'You pick up {item}.')
+                else:
+                    self.zone.add_message(f'{self} picks up {item}.')
+
+    @property
+    def dead(self):
+        return self._hp <= 0
 
     # TODO recompute these only when a mod is added or removed 
     @property
@@ -218,6 +246,8 @@ class Creature(GameObject):
     @hp.setter
     def hp(self, value):
         self._hp = max(0, value)
+        if self._hp == 0:
+            self._events.append('dead')
 
     @property
     def stamina(self):
@@ -253,7 +283,6 @@ class Creature(GameObject):
 
     @food.setter
     def food(self, value):
-        self.world.log.add_message('setting food', value)
         self._food = min(100, max(0, value))
         self.statuses.pop('hungry', None)
         self.statuses.pop('starving', None)
@@ -270,10 +299,12 @@ class Creature(GameObject):
         self._statuses[status] = 1
         if status == 'poisoned':
             # setting duration
+            self._statuses[status] = 100
+        elif status == 'bleeding':
+            # setting duration
             self._statuses[status] = 50
         else: #HACK making these not expire
             self._statuses[status] = 99999
-
 
 class Resistance:
     def __init__(self):

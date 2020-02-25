@@ -5,9 +5,9 @@ import random
 
 import curses
 
-from console import Console
+from experimental.console import Console
 from objects import GameObject, Creature
-from utils import sign, distance_between, distance_between_points, apply_fov, clear
+from utils import sign, distance_between_points, apply_fov, clear
 from gui.shop import Shop
 from gui.charpane import CharPane
 from gui.journal import Journal
@@ -23,15 +23,11 @@ class World:
         self.height = height
         self.console = None
         # self.console = Console()
-        self.show_inv = False
         self.shop = Shop(self)
-        self.char_pane = CharPane(self)
         self.show_shop = False
-        self.show_char_pane = False
         self.journal = Journal(self)
         self.show_journal = False
-        self.log = Log(self)
-        self.show_log = False
+        self.log = Log()
         self.display = None
         self.turn_count = 0
         self.ground_items = []
@@ -42,99 +38,76 @@ class World:
         self.zones = worldgen.zones
         self.zone_id = 0
         self.zone = self.zones[self.zone_id]
-        for zone_id in range(len(self.zones)): 
-            for unit in list(self.zones[zone_id].units):
-                if type(unit) is tuple: #NOTE temp
-                    name, x, y = unit
-                    self.zones[zone_id].units.remove(unit)
-                    self.spawn(name, x, y, zone_id, [])
-            for item in list(self.zones[zone_id].items):
-                if type(item) is tuple: #NOTE temp
-                    name, x, y = item
-                    self.zones[zone_id].items.remove(item)
-                    self.place(name, x, y, zone_id)
-        self.player = Creature(self, 'You', 15, 5, 0,
+        self.player = Creature(self.zone, 'You', 15, 5, 
                 [Item(i) for i in ['unlit torch', 'green potion', 'scroll of alchemy']])
         self.zone.units.append(self.player)
+        for zone_id in range(len(self.zones)): 
+            #TODO fix this by passing units instead of names
+            for tup in list(self.zones[zone_id].units):
+                # skip player
+                if type(tup) is Creature:
+                    continue
+                print(tup)
+                name, x, y = tup
+                self.zones[zone_id].units.remove(tup)
+                self.spawn(name, x, y, zone_id, [])
+            for item in list(self.zones[zone_id].items):
+                self.zones[zone_id].items.remove(item)
+                self.place(item, zone_id)
 
     def spawn(self, name, x, y, zone_id=None, items=[]):
-         # TODO always pass in Creature, not its name
         if zone_id is None:
             zone_id = self.zone_id
-        self.zones[zone_id].units.append(Creature(self, name, x, y, zone_id, items))
+        zone = self.zones[zone_id]
+        zone.units.append(Creature(zone, name, x, y, items))
 
-    def place(self, name, x, y, zone_id=None):
+    def place(self, item, zone_id=None):
         if zone_id is None:
             zone_id = self.zone_id
-        if type(name) is Item: # TODO always pass in Item, not its name
-            item = name
-            name = item.name
-        else:
-            item = Item(name)
-        self.zones[zone_id].items.append(GameObject(self, name, x, y, zone_id, [item]))
+        self.zones[zone_id].items.append(item)
+        items = self.zone.get_items_in_range(item.x, item.y, 0)
+        for item1 in items:
+            for item2 in items:
+                item1.affect_item(item2)
 
     def tick(self):
-        self.ground_items = []
-        for o in self.zone.items:
-            if (o.x, o.y) == (self.player.x, self.player.y):
-                self.ground_items.extend(o.inv.items)
-        for item1 in list(self.ground_items): # poisoning the food
-            if 'green puddle' in item1.name:
-                for item2 in list(self.ground_items):
-                    if 'meal' in item2.name:
-                        item2.poisonous = True
-                        # TODO fix being able to pick up unpoisoned food after spilling poison on it 
-                        # and immediately picking it up
-                        self.ground_items.remove(item1)
-        
+        self.zone.tick()
+        self.ground_items = self.zone.get_items_in_range(self.player.x, self.player.y, 0)
         for u in list(self.zone.units):
-            u.update_temperature(self.zone.temperature)
-            if 'poisoned' in u.statuses:
-                u.hp -= 0.1 * (1 - u.resistance.poison)
-            u.stamina += 0.1
-            for status, duration in list(u.statuses.items()):
-                # self.log.add_message(f'{status}: {duration}')
-                u.statuses[status] -= 1
-                if duration <= 0:
-                    del u.statuses[status]
-            if u.hp <= 0:
-                self.zone.units.remove(u)
-                if u.icon == '@':
-                    self.log.add_message('You die.')
-                else:
-                    self.log.add_message(f'{u} dies.')
-                for item in u.inv.items:
-                    self.place(item, u.x, u.y)
-                continue
-            if u.icon != '@':
-                if distance_between(u, self.player) <= u.vision_distance and \
-                        u.sees(self.player):
-                    u.move_toward_object(self.player)
-                    if random.random() < 0.05:
-                        u.move_delta(random.randint(-1, 1), random.randint(-1, 1))
-                else:
-                    pass #u.move_idle()
-        for item in list(self.zone.items):
-            item.update_temperature(self.zone.temperature)
+            for message in u.get_events():
+                if message == 'dead':
+                    self.zone.units.remove(u)
+                    if u.icon == '@':
+                        self.zone.add_message('You die.')
+                    else:
+                        self.zone.add_message(f'{u} dies.')
+                    # TODO handle item drops elsewhere
+                    for item in u.inv.items:
+                        item.x, item.y = u.x, u.y
+                        self.place(item)
+            if not u.dead:
+                u.tick()
 
     def draw(self):
         self.display = list(list(row) for row in self.zone.get_grid())
-        for o in self.zone.items:
-            if o.icon:
-                self.display[o.y][o.x] = o.icon
+        for i in self.zone.items:
+            if i.icon:
+                self.display[i.y][i.x] = i.icon
+        for s in self.zone.staircases:
+            self.display[s.y1][s.x1] = s.get_icon(s.zone_id1)
         for u in self.zone.units:
             if u.icon:
                 self.display[u.y][u.x] = u.icon
         # apply_fov(self.player, self.display, 3)
-        if self.show_inv:
+        if self.player.inv.shown:
             self.player.inv.apply_on(self.display)
         elif self.show_shop:
             self.shop.apply_on(self.display)
-        elif self.show_char_pane:
-            self.char_pane.apply_on(self.display)
+        elif self.player.char_pane.shown:
+            self.player.char_pane.apply_on(self.display)
         elif self.show_journal:
             self.journal.apply_on(self.display)
-        elif self.show_log:
+        elif self.log.shown:
             self.log.apply_on(self.display)
 
         #curses
@@ -147,18 +120,19 @@ class World:
 
         if self.ground_items and self.player.has_just_moved():
             self.log.add_message(f'You see {self.ground_items} at your feet.')
-        if self.zone.get_tile_at(self.player.x, self.player.y) == '>':
-            self.log.add_message(f'You see stairs leading down.')
-        if self.zone.get_tile_at(self.player.x, self.player.y) == '<':
-            self.log.add_message(f'You see stairs leading up.')
+        staircase = self.zone.get_staircase_at(self.player.x, self.player.y)
+        if staircase:
+            if staircase.get_icon(self.zone_id) == '>':
+                self.log.add_message(f'You see stairs leading down.')
+            else:
+                self.log.add_message(f'You see stairs leading up.')
 
         print(self.log.get_last_message())
         print(', '.join([f'HP:{self.player.hp:.0f}', f'XP:{self.player.exp}', 
-                        f'STA:{self.player.stamina:.0f}', 
-                        # f'TEM:{self.player.temperature:.1f}°C',
-                        f'WATER:{self.player.water}', f'FOOD:{self.player.food}',
-                        # f'ZONE:{self.zone.temperature}°C',
-                        f'T:{self.turn_count}']))
+                        f'STA:{self.player.stamina:.0f}',  f'T:{self.turn_count}',
+                        f'TEM:{self.player.temperature:.1f}°C',
+                        # f'WATER:{self.player.water:.0f}', f'FOOD:{self.player.food:.0f}',
+                        ]))
                 
         print(f', '.join(self.player.statuses))
 
@@ -166,6 +140,7 @@ class World:
         self.zone.units.remove(self.player)
         self.zone_id = index
         self.zone = self.zones[self.zone_id]
+        self.player.zone = self.zone
         self.zone.units.append(self.player)
 
     def change_zone(self):
@@ -181,15 +156,8 @@ class World:
                     self.log.add_message(staircase.get_ascend_message())
                 self.set_zone_id(zone_id)
                 self.player.x, self.player.y = x, y
+                self.log.add_message(f'Temperature is {self.zone.temperature}°C.')
                 break
-    def get_items_in_range(self, x, y, distance):
-        items = []
-        for o in self.zone.items:
-            if distance_between_points((x, y), (o.x, o.y)) <= distance:
-                for item in o.inv.items:
-                    items.append(item)
-        return items
-
 
     def update(self, advance_turn):
         if advance_turn:
@@ -197,5 +165,7 @@ class World:
         clear()
         if advance_turn:
             self.tick()
+        for message in self.zone.get_messages():
+            self.log.add_message(message)
         self.draw()
         self.log.hide_last_message()

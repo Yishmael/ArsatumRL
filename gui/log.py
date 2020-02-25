@@ -2,14 +2,14 @@ from .pane import Pane
 from item import Item
 
 class Log(Pane):
-    def __init__(self, world):
+    def __init__(self):
         super(Log, self).__init__(0, 10)
-        self.world = world
         self.line_length = 60
         self.scroll_y = 0
         self.lines = []
         self.last_message = ''
         self.last_message_idx = 0
+        self.shown = False
         self.show_last_message = True
 
     def apply_on(self, display):
@@ -48,7 +48,7 @@ class Log(Pane):
         
     def recv_key(self, key):
         if key == 'l':
-            self.world.show_log = False
+            self.shown = False
             self.reset_scroll()
         elif key == 'down':
             self.scroll_y = min(max(0, len(self.lines) - self.h + 4), self.scroll_y + 1)

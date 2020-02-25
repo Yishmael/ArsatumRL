@@ -4,7 +4,7 @@ from item import Item
 class Shop(Pane):
     def __init__(self, world):
         Pane.__init__(self, 0, 0)
-        self.items = [Item(i) for i in ['amber potion', 'yellow potion', 'green potion', 'green potion']]
+        self.items = [Item(i) for i in ['amber potion', 'yellow potion', 'scroll of alchemy', 'green potion']]
         self.world = world
 
     def __repr__(self):

@@ -1,19 +1,20 @@
 
 import random
-#CHANGE!!
 from utils import get_icon
 
 class Item:
-    def __init__(self, name):
+    def __init__(self, name, x=0, y=0):
         self.name = name
+        self.x = x
+        self.y = y
         self.mass = 0
         self.poisonous = False
-        self.temperature = 10
+        self._temperature = 15
         self.icon = get_icon(self.name)
         self.modifiers = []
         self.slot = ''
         if 'potion' in name: 
-            self.mass = 0.5
+            self.mass = 0.8
             self._quantity = 3
             if 'green potion' in name:
                 self.poisonous = True
@@ -48,7 +49,7 @@ class Item:
     def __repr__(self):
         s = ''
         if 'potion' in self.name:
-            s += f'{self.name} (qty:{self._quantity}) '
+            s += f'{self.name} (qty:{self.quantity}) '
         elif 'torch' in self.name:
             s += f'{self.name} (dur:{self._duration}) '
         elif self.mass != 0:
@@ -56,8 +57,10 @@ class Item:
         else:
             s += f'{self.name} '
         s += f'({self.temperature:.1f})°C'
-        
         return s
+
+    def update_temperature(self, ambient_temperature):
+        self.temperature += (ambient_temperature - self.temperature) * 0.01
 
     @property
     def select_text(self):
@@ -89,57 +92,81 @@ class Item:
     @quantity.setter
     def quantity(self, value):
         self._quantity = min(3, max(0, value))
+        if 'potion' in self.name:
+            self.mass = 0.2 + self._quantity * 0.2
         if self._quantity == 0:
             if 'potion' in self.name:
                 self.name = 'glass flask'
             elif 'scroll' in self.name:
                 self.name = 'blank scroll'
+    
+    @property
+    def temperature(self):
+        return self._temperature
+
+    @temperature.setter
+    def temperature(self, value):
+        self._temperature = value
+        if 'potion' in self.name:
+            if self.quantity == 3 and self.temperature < -2:
+                self.quantity = 0
+                self.name = 'shattered glass'
+        if 'meal' in self.name:
+            if self.temperature < -2:
+                self.name = 'frozen meal'            
                 
     def get_info(self):
-        return f'Not much is known about this {self.name}.'
+        return Item.info(self.name)
     
     #TODO settle the order of messages and make it more generic
-    def affect(self, unit):
+    def affect_unit(self, unit):
         if 'potion' in self.name:
             if 'yellow' in self.name:
                 unit.hp += 3
-                unit.world.log.add_message('You feel better.')
+                unit.zone.add_message('You feel better.')
                 return
             if 'amber' in self.name:
                 unit.resistance.cold = 100
-                unit.world.log.add_message('You feel much warmer.')
+                unit.zone.add_message('You feel much warmer.')
                 return
             if 'green' in self.name:
-                unit.world.log.add_message('It tastes very sweet.')
+                unit.zone.add_message('It tastes very sweet.')
                 unit.add_status('poisoned')
                 return
             if 'water' in self.name:
                 unit.hp += 0.5
                 unit.water += 10
-                unit.world.log.add_message('You feel refreshed.')
+                unit.zone.add_message('You feel refreshed.')
                 return
         elif 'meal' in self.name:
             if self.poisonous:
                 unit.food += 2
-                unit.world.log.add_message('It tastes sweeter than expected.')
+                unit.zone.add_message('It tastes sweeter than expected.')
                 unit.add_status('poisoned')
                 return
             else:
                 unit.food += 10
-                unit.world.log.add_message('It\'s chewy, but tastes great.')
+                unit.zone.add_message('It\'s chewy, but tastes great.')
                 return
         elif 'scroll' in self.name:
             if 'alchemy' in self.name:
-                items = unit.world.get_items_in_range(unit.x, unit.y, 1)
+                items = unit.zone.get_items_in_range(unit.x, unit.y, 1)
                 for item in items:
                     if 'water potion' in item.name:
                         qty = item.quantity
                         item.quantity = 0
                         item.fill('amber', qty)
+
+    def affect_item(self, item):
+        if item is self:
+            return
+        if 'green puddle' in self.name:
+            if 'meal' in item.name:
+                item.poisonous = True
                         
     def get_content(self):
         if 'potion' in self.name:
-            return Item(self.name.split(maxsplit=1)[1] + ' puddle')
+            return Item(self.name.split()[0] + ' puddle')
         return None
 
     def get_broken(self):
@@ -162,14 +189,26 @@ class Item:
         if liquid == 'water':
             self.name = 'water potion'
             self.mass = 0.5
-            self._quantity = quantity
+            self.quantity = quantity
         if liquid == 'amber':
             self.name = 'amber potion'
             self.mass = 0.5
-            self._quantity = quantity
+            self.quantity = quantity
 
     def full(self):
-        return self._quantity >= 3
+        return self.quantity >= 3
 
     def refillable(self):
         return 'water potion' in self.name or 'flask' in self.name
+
+    @staticmethod
+    def info(name):
+        details = {
+            'glass flask': 'this {} can be used to store liquids.',
+            'scroll of alchemy': '{} transmutes nearby water to a random liquid',
+            'water potion': 'A bottle of water. Use with caution.'
+        }
+        if name in details.keys():
+            return details[name].format(name)
+        else:
+            return f'Not much is known about this {name}.'

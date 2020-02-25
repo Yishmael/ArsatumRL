@@ -36,7 +36,8 @@ class WorldGenerator:
                 self.snail.generate()
                 zone = self.snail.zone
             zone.id = i
-            zone.temperature = 5 - 5*i
+            zone.temperature = 5 - 10*i
+            zone.init()
             self.zones.append(zone)
             
     def _connect_zones(self, graph):
@@ -99,11 +100,7 @@ class WorldGenerator:
         zone_count = len(graph)
         self._generate_zones(zone_count)
         self._connect_zones(graph)
-
         # print()
-        for zone in self.zones:
-            # print(zone.id, zone.staircases)
-            zone.update()
 
 WIDTH, HEIGHT = 65, 12
 if __name__ == '__main__':
