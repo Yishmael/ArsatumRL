@@ -1,6 +1,8 @@
 import os
 import sys
 
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from experimental.components import *
 from utils import Vector, get_direction
 
 class Entity:
@@ -9,15 +11,14 @@ class Entity:
         self.comps = []
     def __repr__(self):
         return f'E{self.id_}'
-    def add_comp(self, class_):
-        if class_ is PhysicsComponent:
-            self.comps.append(class_(self.id_, 0, 0))
-        elif class_ is AiComponent:
-            self.comps.append(class_(self.id_, 'patrol'))
-        elif class_ is InputComponent:
-            self.comps.append(class_(self.id_))
-        elif class_ is InventoryComponent:
-            self.comps.append(class_(self.id_))
+    def add_comp(self, comp):
+        for c in self.comps:
+            c_name = c.__class__.__name__
+            comp_name = comp.__class__.__name__
+            if c_name == comp_name:
+                raise ValueError(f'Component {c_name} already present.')
+        else:
+            self.comps.append(comp)
 
     def get_comp(self, type_):
         for comp in self.comps:
@@ -25,38 +26,12 @@ class Entity:
                 return comp
         return None
 
-class AiComponent:
-    def __init__(self, entity, type_):
-        self.entity = entity
-        self.type_ = type_
-        self.point_a = Vector(0, 0)
-        self.point_b = Vector(2, 0)
-        self.current_point = 'a'
-
-class PhysicsComponent:
-    gravity = -10
-    def __init__(self, entity, x, y):
-        self.entity = entity
-        self.x = x
-        self.y = y
-
-class InputComponent:
-    def __init__(self, entity):
-        self.entity = entity
-        self.last_key = None
-
-class InventoryComponent:
-    def __init__(self, entity):
-        self.entity = entity
-        self.items = ['stick', 'potion']
-        self.shown = False
-
 class InputSystem:
     def __init__(self, entities):
         self.entities = entities
     def update(self, key):
         ent = self.entities[0]
-        phys = ent.get_comp(PhysicsComponent)
+        phys = ent.get_comp(TransformComponent)
         inv = ent.get_comp(InventoryComponent)
         key = 'i'
         if inv.shown:
@@ -77,48 +52,60 @@ class AiSystem:
                 continue
             ent = entities[ai.entity]
             if ai.type_ == 'patrol': # move between point_a and point_b
-                phys = ent.get_comp(PhysicsComponent)
+                phys = ent.get_comp(TransformComponent)
                 x, y = phys.x, phys.y
-                if ai.current_point == 'a':
-                    direction = get_direction((x, y), ai.point_b)
+                if ai.current_point == ai.point_a:
+                    direction = get_direction((x, y), (ai.point_b.x, ai.point_b.y))
                     phys.x += direction.x
                     phys.y += direction.y
-                    if (phys.x, phys.y) == ai.point_b:
-                        ai.current_point = 'b'
-                elif ai.current_point == 'b':
-                    direction = get_direction((x, y), ai.point_a)
+                    if Vector(phys.x, phys.y) == ai.point_b:
+                        ai.current_point = ai.point_b
+                elif ai.current_point == ai.point_b:
+                    direction = get_direction((x, y), (ai.point_a.x, ai.point_a.y))
                     phys.x += direction.x
                     phys.y += direction.y
-                    if (phys.x, phys.y) == ai.point_a:
-                        ai.current_point = 'a'
+                    if Vector(phys.x, phys.y) == ai.point_a:
+                        ai.current_point = ai.point_a
+                print(f'E{ai.entity}', phys.x, phys.y)
 
 if 'idlelib' not in sys.modules:
     os.system('cls')
 entities = []
 ent = Entity(0)
-ent.add_comp(PhysicsComponent)
-ent.add_comp(InputComponent)
-ent.add_comp(InventoryComponent)
+ent.add_comp(TransformComponent(0, 0, 0))
+ent.add_comp(InputComponent(0))
+ent.add_comp(InventoryComponent(0))
 entities.append(ent)
+
+# creating a unit
 ent = Entity(1)
-ent.add_comp(PhysicsComponent)
-ent.add_comp(AiComponent)
+ent.add_comp(TransformComponent(1, 0, 0))
+ent.add_comp(AiComponent(1, 'patrol'))
+ent.add_comp(MovementComponent(1))
+ent.add_comp(HealthComponent(1, 100))
+ent.add_comp(StatusComponent(1))
 entities.append(ent)
 
 # update InputComponent
 # update AiComponent
 # update PhysComponent
 
-phys_comps = [entity.get_comp(PhysicsComponent) for entity in entities]
-
+phys_comps = [entity.get_comp(TransformComponent) for entity in entities]
 ai_system = AiSystem(entities)
 inp_system = InputSystem(entities)
 # main update loop
-for _ in range(5):
+frames = 8
+for _ in range(frames):
     ai_system.update()
     #key = input('Key: ')
     key = ''
-    inp_system.update(key)
+    #inp_system.update(key)
+
+for _ in range(frames):
+    ai_system.update()
+    #key = input('Key: ')
+    key = ''
+    #inp_system.update(key)
 
 
     

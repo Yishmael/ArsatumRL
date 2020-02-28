@@ -5,7 +5,7 @@ class CharPane(Pane):
     def __init__(self, unit):
         Pane.__init__(self, 0, 0)
         self.unit = unit
-        self.slots = ['head', 'chest', 'hands', 'weapons/shields', 'legs', 'boots']
+        self.slots = ['head', 'chest', 'hands', 'weapons/shields', 'legs', 'feet']
         self.items = {s:[] for s in self.slots}
         self.shown = False
 

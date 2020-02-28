@@ -5,7 +5,7 @@ import math
 import random
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from utils import sign, get_direction, clear, print_zone, WIDTH, HEIGHT
+from utils import sign, get_direction, clear, WIDTH, HEIGHT
 from objects import Creature
 from item import Item
 
@@ -21,17 +21,17 @@ class ZoneGenerator:
         y_range = list(range(HEIGHT))
         for _ in range(50):
             x, y = random.choice(x_range), random.choice(y_range)
-            if self.zone.get_tile_at(x, y) != '.':
+            if self.zone.get_tile_at(x, y).icon != '.':
                 continue
             if len(self.zone.units) < 3:
-                self.zone.place_unit_by_name('cave bat', x, y)
+                self.zone.units.append(Creature(self.zone, 'cave bat', x, y, []))
 
     def _place_items(self):
         x_range = list(range(WIDTH))
         y_range = list(range(HEIGHT))
         for _ in range(50):
             x, y = random.choice(x_range), random.choice(y_range)
-            if self.zone.get_tile_at(x, y) != '.':
+            if self.zone.get_tile_at(x, y).icon != '.':
                 continue
             if len(self.zone.items) < 3:
                 name = random.choice(['hearty meal', 'stick', 'shovel'])

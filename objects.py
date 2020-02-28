@@ -16,10 +16,6 @@ class GameObject:
         self.just_moved = True
         self.temperature = 20
         self.inv = Inventory(self, items)
-        self._events = []
-
-    # def __repr__(self):
-    #     return self.icon
 
     def __str__(self):
         return self.name
@@ -27,23 +23,21 @@ class GameObject:
     def sees(self, o):
         return True or self.x == o.x or self.y == o.y
 
-    def walkable(self, tile):
-        return tile in ['.']
-
     def has_just_moved(self):
         just_moved = self.just_moved
         self.just_moved = False
         return just_moved
 
+    # TODO move this to zone
     def can_move_to(self, x, y):
         if not within_bounds(x, y):
             return False
         tile = self.zone.get_tile_at(x, y)
-        if not self.walkable(tile):
-            if tile == '#':
+        if not tile.walkable:
+            if tile.terrain_icon == '#':
                 if self.icon == '@':
                     pass #'You flatten yourself against the wall'
-            elif tile == '_':
+            elif tile.terrain_icon == '_':
                 self.inv.recv('refill water')
             return False
         for u in self.zone.units:
@@ -53,18 +47,12 @@ class GameObject:
                 return False
         return True
     
-    def get_events(self):
-        events = list(self._events)
-        self._events.clear()
-        return events
-       
-    # TODO use the formula with equilibrium
-    # TODO take clothes worn into account
-    def update_temperature(self, ambient_temperature):
-        self.temperature += (ambient_temperature - self.temperature) * 0.0001
-        for item in self.inv.items:
-            item.update_temperature(self.temperature)
-            
+    # TODO utilize this
+    # def get_events(self):
+    #     events = list(self._events)
+    #     self._events.clear()
+    #     return events
+    #             
 
 class Creature(GameObject):
     def __init__(self, zone, name, x, y, items):
@@ -83,10 +71,12 @@ class Creature(GameObject):
         self.modifiers = []
         self._base_damage = 0
         self.char_pane = CharPane(self)
+        self.destroyed = False
         if self.icon == '@':
             self._hp = 30
             self._base_damage = 1
             self.exp_reward = 0
+            self.char_pane.equip(Item('leather boots'))
         elif self.name == 'white rat':
             self._hp = 2
             self.vision_distance = 3
@@ -105,6 +95,13 @@ class Creature(GameObject):
         else:
             self._hp = 10
 
+    # TODO use the formula with equilibrium
+    def update_temperature(self, ambient_temperature):
+        factor = 0.0001
+        if self.char_pane.get_items_at_slot('chest'):
+            factor /= 10
+        self.temperature += (ambient_temperature - self.temperature) * factor
+
     def move_idle(self):
         if random.random() < 0.90:
             return
@@ -113,10 +110,6 @@ class Creature(GameObject):
         else:
             direction = get_direction((self.x, self.y), (self.org_x, self.org_y))
             self.move_delta(direction.x, direction.y)
-
-    def move_toward_point(self, x, y):
-        dx, dy = get_direction((self.x, self.y), (x, y))
-        self.move_delta(dx, dy)
     
     def move_toward_object(self, o):
         dx, dy = get_direction((self.x, self.y), (o.x, o.y))
@@ -132,20 +125,20 @@ class Creature(GameObject):
             self.interact_with(self.x + dx, self.y + dy)
 
     def interact_with(self, x, y):
-        for u in self.zone.units:
-            if (u.x, u.y) == (x, y):
-                # preventing units from attacking each other
-                if '@' in [self.icon, u.icon]:
-                    self.attack(u)
-                break
+        for u in self.zone.get_units_in_range(x, y, 0):
+            # preventing units from attacking each other
+            if '@' in [self.icon, u.icon]:
+                self.attack(u)
+            break
         if not within_bounds(x, y):
             return
         tile = self.zone.get_tile_at(x, y)
 
-        if self.icon == '@' and tile.isdigit():
+        if self.icon == '@' and tile.terrain_icon.isdigit():
             self.show_shop = True
 
     def tick(self):
+        self.inv.tick()
         # self.temperature += (37 - self.temperature) * 0.01
         if 'poisoned' in self.statuses:
             self.food -= 0.1 * (1 - self.resistance.poison)
@@ -159,13 +152,14 @@ class Creature(GameObject):
                 del self.statuses[status]
 
         if self.icon != '@':
-            if distance_between(self, self.zone.player) <= self.vision_distance and \
-                    self.sees(self.zone.player):
-                self.move_toward_object(self.zone.player)
-                if random.random() < 0.05:
-                    self.move_delta(random.randint(-1, 1), random.randint(-1, 1))
-            else:
-                pass # self.move_idle()     
+            if self.zone.player:
+                if distance_between(self, self.zone.player) <= self.vision_distance and \
+                        self.sees(self.zone.player):
+                    self.move_toward_object(self.zone.player)
+                    if random.random() < 0.05:
+                        self.move_delta(random.randint(-1, 1), random.randint(-1, 1))
+                else:
+                    pass # self.move_idle()     
             
     def attack(self, u):
         blocked = random.random() < u.block/10
@@ -247,7 +241,9 @@ class Creature(GameObject):
     def hp(self, value):
         self._hp = max(0, value)
         if self._hp == 0:
-            self._events.append('dead')
+            for item in self.inv.items:
+                item.x, item.y = self.x, self.y
+                self.zone.place_item(item)
 
     @property
     def stamina(self):

@@ -22,9 +22,6 @@ class Inventory(Pane):
     def __repr__(self):
         return ', '.join(item.name for item in self._items)
 
-    def remove_item(self, item):
-        self._items.remove(item)
-
     def add_item(self, item):
         self._items.append(item)
 
@@ -53,14 +50,13 @@ class Inventory(Pane):
 
     @property
     def mass(self):
-        return sum((item.mass for item in self._items))
+        return 2 + sum(item.mass for item in self._items)
 
     def apply_on(self, display):
         super().apply_on(display)
         left = self.x + 2
 
-        total_mass = sum(item.mass for item in self._items)
-        title = f'Backpack ({total_mass:.1f} kg)'
+        title = f'Backpack ({self.mass:.1f} kg)'
         display[1][left:left+len(title)] = list(title)
 
         for idx, item in enumerate(self._items):
@@ -101,7 +97,7 @@ class Inventory(Pane):
                 action = self.selected_item.actions[key]
                 if action == 'drop':
                     self.unit.zone.add_message(f'You drop {self.selected_item}.')
-                    self.remove_item(self.selected_item)
+                    self.items.remove(self.selected_item)
                     self.selected_item.x, self.selected_item.y = self.unit.x, self.unit.y
                     self.unit.zone.place_item(self.selected_item, False)
                     self.selected_item = None
@@ -113,19 +109,20 @@ class Inventory(Pane):
                 elif action == 'equip':
                     self.unit.zone.add_message(f'You equip {self.selected_item}.')
                     self.unit.char_pane.equip(self.selected_item)
-                    self.remove_item(self.selected_item)
+                    self.items.remove(self.selected_item)
                     self.selected_item = None
                     self.state = State.DEFAULT
-                elif action == 'eat':
-                    self.unit.zone.add_message(f'You eat {self.selected_item}.')
-                    self.selected_item.affect_unit(self.unit)
-                    self.remove_item(self.selected_item)
-                    self.selected_item = None
-                    self.state = State.DEFAULT
-                elif action == 'drink':
-                    self.unit.zone.add_message(f'You drink {self.selected_item}.')
-                    self.selected_item.affect_unit(self.unit)
+                elif action in ['eat', 'drink', 'read']:
+                    if action == 'eat':
+                        self.unit.zone.add_message(f'You eat {self.selected_item}.')
+                    elif action == 'drink':
+                        self.unit.zone.add_message(f'You drink {self.selected_item}.')
+                    elif action == 'read':
+                        self.unit.zone.add_message('The written words fade as you read them.')
+                    self.selected_item.affect_unit(self.unit, 'used')
                     self.selected_item.quantity -= 1
+                    if self.selected_item.destroyed:
+                        self.items.remove(self.selected_item)
                     self.selected_item = None
                     self.state = State.DEFAULT
                 elif action == 'spill':
@@ -139,12 +136,6 @@ class Inventory(Pane):
                 elif action == 'throw':
                     self.unit.zone.add_message(f'Throw {self.selected_item} in which direction?')
                     self.state = State.ITEM_USED
-                elif action == 'read': # TODO combine read and drink and eat
-                    self.unit.zone.add_message('The written words fade as you read them.')
-                    self.selected_item.affect_unit(self.unit)
-                    self.selected_item.quantity -= 1
-                    self.selected_item = None
-                    self.state = State.DEFAULT
             else:
                 self.unit.zone.add_message('Action cancelled.')
                 self.selected_item = None
@@ -153,21 +144,33 @@ class Inventory(Pane):
             if key in ['home', 'up', 'page_up', 'left', 'right', 'end', 'down', 'page_down']:
                 action = self.selected_item.actions['t'] # TODO get the actual action
                 if action == 'throw':
-                    self.remove_item(self.selected_item)
                     x, y = self.unit.x, self.unit.y
                     self.unit.zone.add_message(f'You throw {self.selected_item}.')
-                    # TODO update the item instead of spawning new
-                    # and display a message that item broke
-                    # call method to break the item, making it contain the pieces
-                    for item in self.selected_item.get_broken():
-                        item.x, item.y = x+get_dir(key)[0]*4, y+get_dir(key)[1]*4
-                        self.unit.zone.place_item(item, False)
+                    self.selected_item.break_('thrown')
+                    self.unit.zone.add_message(f'{self.selected_item} shatters as it hits the ground.')
+                    for piece in self.selected_item.pieces:
+                        piece.x, piece.y = x+get_dir(key)[0]*4, y+get_dir(key)[1]*4
+                        self.unit.zone.place_item(piece, False)
+                    self.items.remove(self.selected_item)
                     self.selected_item = None
                     self.state = State.DEFAULT
             else:
                 self.unit.zone.add_message('Action cancelled.')
                 self.selected_item = None
                 self.state = State.DEFAULT
+    
+    def tick(self):
+        # TODO take into account unit and zone temperature
+        # TODO take into account other items' temperature
+        for item in self.items:
+            item.update_temperature(self.unit.temperature)
+
+        for item in list(self.items):
+            if item.broken:
+                pieces = item.pieces
+                for piece in pieces:
+                    self.items.append(piece)
+                self.items.remove(item)
 
     def select(self, c):
         if c is None or len(c) > 1:

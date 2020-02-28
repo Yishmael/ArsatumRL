@@ -36,10 +36,9 @@ class InputHandler:
             locs.append(f'@: ({self.world.player.x}, {self.world.player.y})')
             for y in range(HEIGHT):
                 for x in range(WIDTH):
-                    icon = self.world.zone.get_tile_at(x, y)
-                    # TODO get items and objects from the zone
-                    if icon not in ['#', '.']:
-                        locs.append(f'{icon}: ({x}, {y})')
+                    tile = self.world.zone.get_tile_at(x, y)
+                    if tile.icon not in ['.', '#']:
+                        locs.append(f'{tile.icon}: ({x}, {y})')
             self.world.log.add_message(', '.join(locs))
         elif key == 'esc':
             if not (self.world.player.inv.shown or self.world.show_shop or self.world.player.char_pane.shown or \

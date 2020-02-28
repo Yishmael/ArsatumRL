@@ -47,7 +47,7 @@ class Loader:
             return [list(line) for line in f.read().split('\n')]
 
 class Vector:
-    def __init__(self, x, y):
+    def __init__(self, x=0, y=0):
         self.x = x
         self.y = y
     def __iter__(self):
@@ -58,31 +58,11 @@ class Vector:
     #     elif idx == 1:
     #         return self.y
     def __eq__(self, other):
+        if type(other) is Vector:
+            return self.x == other.x and self.y == other.y
         return self.x == other[0] and self.y == other[1]
     def __repr__(self):
         return f'Vector({self.x}, {self.y})'
-
-def print_zone(zone, cls=False):
-    if cls:
-        clear()
-    for idx, row in enumerate(zone.get_grid()):
-        row = list(row)
-        for staircase in zone.staircases:
-            x, y = staircase.get_coords(zone.id)
-            if y == idx:
-                row[x] = staircase.get_icon(zone.id)
-        for ent in zone.units:
-            if type(ent) is tuple:
-                # TODO remove this block when it's clear it won't be needed
-                x, y = ent[:2]
-                if y == idx:
-                    row[x] = ent[2]
-                raise ValueError(ent)
-            else:
-                x, y = ent.x, ent.y
-                if y == idx:
-                    row[x] = ent.icon
-        print(''.join(row))
 
 def clear():
     if 'idlelib' in sys.modules:

@@ -20,30 +20,35 @@ class WorldGenerator:
     def __init__(self, width, height):
         self.width = width
         self.height = height
-        self.snail = SnailGen(self.width, self.height)
-        self.town = TownGen(self.width, self.height)
-        self.blank = BlankGen(self.width, self.height)
+        path = 'graph.json'
+        if __name__ != '__main__':
+            path = 'generators/' + path
+        with open(path) as f:
+            self.graph = json.load(f)
+        # with open(path, 'w') as f:
+        #     json.dump(self.graph, f, indent=2)
+        self.generators = {'town': TownGen(self.width, self.height),
+                           'snail': SnailGen(self.width, self.height),
+                           'blank': BlankGen(self.width, self.height)}
         
-    def _generate_zones(self, zone_count):
-        # TODO pass list of generators instead of just the count
-        self.zones = []
-        for i in range(zone_count):
-            if i == 0:
-                # self.snail.generate(i)
-                self.town.generate(i)
-                zone = self.town.zone
-            else:
-                self.snail.generate()
-                zone = self.snail.zone
-            zone.id = i
-            zone.temperature = 5 - 10*i
+    def _generate_zones(self):
+        self.zones = {}
+        for zone_id in self.graph['zones'].keys():
+            try:
+                gen = self.generators[self.graph['generators'][zone_id]]
+            except KeyError:
+                raise KeyError(f'Missing generator for zone {zone_id}.')
+            gen.generate()
+            zone = gen.zone
+            zone.id = int(zone_id)
+            zone.temperature = 5 - 10*int(zone_id)
             zone.init()
-            self.zones.append(zone)
+            self.zones[zone.id] = zone
             
-    def _connect_zones(self, graph):
+    def _connect_zones(self):
         # print(self.zones)
-        for idx, zone in enumerate(self.zones):
-            adj_ids = [int(a) for a in graph[str(zone.id)]]
+        for idx, zone in enumerate(self.zones.values()):
+            adj_ids = [int(a) for a in self.graph['zones'][str(zone.id)]]
             print(zone.id, adj_ids)
             for adj_id in adj_ids:
                 # find stairs leading to the adj zone
@@ -53,12 +58,7 @@ class WorldGenerator:
                 else:
                     # no stairs linking current zone to adj zone
                     # create such a link
-                    recommendations = zone.recommended_stairs_coords
-                    if len(recommendations) > 0:
-                        x, y = recommendations[0]
-                    else:
-                        x, y = zone.id*2 + random.randint(5, 20), 5
-                    
+                    x, y = zone.get_recommended_stairs_coords()                    
                     sc = Staircase(x, y, zone.id)
                     print('current:', sc)
                     zone.staircases.append(sc)
@@ -73,15 +73,9 @@ class WorldGenerator:
                             break
                     else: # adj starcase not found
                         # create adj staircase
-                        recommendations = self.zones[adj_id].recommended_stairs_coords
-                        # TODO do this directly from the zone, without checking if set is empty
-                        # TODO make it random, but don't allow the same recommendation 
-                        # to be used more than once
-                        if len(recommendations) > 1:
-                            x, y = recommendations[1]
-                        else:
-                            x, y = adj_id*2 + random.randint(5, 20), 8
+                        x, y = self.zones[adj_id].get_recommended_stairs_coords()
                         adj_sc = Staircase(x, y, adj_id, sc.x1, sc.y1, sc.zone_id1)
+                        print('Connect', adj_sc)
 
                         self.zones[adj_id].staircases.append(adj_sc)
                         print('created new sc for adjecent', adj_sc)
@@ -91,28 +85,20 @@ class WorldGenerator:
                     sc.zone_id2 = adj_sc.zone_id1
 
     def generate_world(self):
-        path = 'graph.json'
-        if __name__ != '__main__':
-            path = 'generators/' + path
-        with open(path) as f:
-            graph = json.load(f)
         # print(json.dumps(graph, indent=2))
-        zone_count = len(graph)
-        self._generate_zones(zone_count)
-        self._connect_zones(graph)
+        self._generate_zones()
+        self._connect_zones()
         # print()
 
 WIDTH, HEIGHT = 65, 12
+
 if __name__ == '__main__':
     clear()
     worldgen = WorldGenerator(WIDTH, HEIGHT)
     worldgen.generate_world()
     print()
-    for zone_id, zone in enumerate(worldgen.zones):
-        # print(zone_id)
-        # print(zone.staircases)
+    for zone_id, zone in enumerate(worldgen.zones.values()):
+        print(zone_id)
+        print(zone.staircases)
         zone.print(0); print()
         pass
-else:
-    # disabling printing if just importing
-    print = lambda *x: None

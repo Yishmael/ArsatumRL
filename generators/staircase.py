@@ -22,7 +22,7 @@ class Staircase:
     
     def get_ascend_message(self):
         zone_id = min((self.zone_id1, self.zone_id2))
-        if self.zone_id1 is not None: # TODO deal with disabled stairs properly
+        if self.zone_id1 is not None:
             message = f'You ascend the stairs. Depth level {zone_id}. '
             if zone_id == 0:
                 if random.random() < 0.4:
@@ -31,6 +31,7 @@ class Staircase:
             message = 'The stairs lead to a brick wall.'
         return message
 
+    # TODO use only zone_id
     def get_exit_location(self, x, y, zone_id):
         if (x, y, zone_id) not in  ((self.x1, self.y1, self.zone_id1), (self.x2, self.y2, self.zone_id2)):
             return None
