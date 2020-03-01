@@ -4,7 +4,7 @@ import json
 import random
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils import clear
+from utils import clear, WIDTH, HEIGHT
 if __name__ == '__main__':
     from snailgen import SnailGen
     from towngen import TownGen
@@ -89,8 +89,6 @@ class WorldGenerator:
         self._generate_zones()
         self._connect_zones()
         # print()
-
-WIDTH, HEIGHT = 65, 12
 
 if __name__ == '__main__':
     clear()

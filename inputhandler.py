@@ -2,7 +2,6 @@ import os
 import sys
 import signal
 
-import curses
 from pynput import keyboard
 
 from utils import get_dir, WIDTH, HEIGHT
@@ -73,6 +72,11 @@ class InputHandler:
             self.world.show_journal = True
         elif key == 'l':
             self.world.log.shown = True
+        elif key == 'v':
+            if self.world.player._base_vision_distance == 100:
+                self.world.player._base_vision_distance = 1
+            else:
+                self.world.player._base_vision_distance = 100
         if key == 'space':
             self.close_all_panes()
             x, y = self.world.player.x, self.world.player.y

@@ -1,7 +1,10 @@
 import random
 from collections import defaultdict
 
-from utils import sign, distance_between_points, get_direction, WIDTH, HEIGHT, get_icon, within_bounds, distance_between
+from utils import (
+    sign, distance_between_points, get_direction, WIDTH, HEIGHT, get_icon, 
+    within_bounds, distance_between, get_line_points, Vector
+)
 from gui.inventory import Inventory
 from gui.charpane import CharPane
 from item import Item
@@ -19,9 +22,6 @@ class GameObject:
 
     def __str__(self):
         return self.name
-            
-    def sees(self, o):
-        return True or self.x == o.x or self.y == o.y
 
     def has_just_moved(self):
         just_moved = self.just_moved
@@ -45,14 +45,7 @@ class GameObject:
                 continue
             if (u.x, u.y) == (x, y):
                 return False
-        return True
-    
-    # TODO utilize this
-    # def get_events(self):
-    #     events = list(self._events)
-    #     self._events.clear()
-    #     return events
-    #             
+        return True            
 
 class Creature(GameObject):
     def __init__(self, zone, name, x, y, items):
@@ -76,20 +69,22 @@ class Creature(GameObject):
             self._hp = 30
             self._base_damage = 1
             self.exp_reward = 0
+            self._base_vision_distance = 1
             self.char_pane.equip(Item('leather boots'))
+            self.char_pane.equip(Item('lit torch'))
         elif self.name == 'white rat':
             self._hp = 2
-            self.vision_distance = 3
+            self._base_vision_distance = 3
             self._base_damage = 1
             self.exp_reward = 1
         elif self.name == 'coyote':
             self._hp = 3
-            self.vision_distance = 4
+            self._base_vision_distance = 4
             self._base_damage = 2
             self.exp_reward = 3
         elif self.name == 'cave bat':
             self._hp = 2
-            self.vision_distance = 8
+            self._base_vision_distance = 8
             self._base_damage = 1
             self.exp_reward = 1
         else:
@@ -137,6 +132,14 @@ class Creature(GameObject):
         if self.icon == '@' and tile.terrain_icon.isdigit():
             self.show_shop = True
 
+    def sees(self, o):
+        points = get_line_points(Vector(self.x, self.y), Vector(o.x, o.y))
+        for point in points:
+            # TODO access tiles, not grid
+            if self.zone._grid[point.y][point.x] == '#':
+                return False
+        return True
+
     def tick(self):
         self.inv.tick()
         # self.temperature += (37 - self.temperature) * 0.01
@@ -153,15 +156,25 @@ class Creature(GameObject):
 
         if self.icon != '@':
             if self.zone.player:
+
                 if distance_between(self, self.zone.player) <= self.vision_distance and \
                         self.sees(self.zone.player):
                     self.move_toward_object(self.zone.player)
-                    if random.random() < 0.05:
+                    if self.icon == 'r':
+                        self.zone.add_message('I see you!')
+                    elif random.random() < 0.05:
                         self.move_delta(random.randint(-1, 1), random.randint(-1, 1))
+                elif self.icon == 'r':
+                    for item in self.zone.get_items_in_range(self.x, self.y, self.vision_distance):
+                        if self.sees(item):
+                            if 'meal' in item.name:
+                                self.move_toward_object(item)
+                            break
                 else:
-                    pass # self.move_idle()     
+                    self.move_idle()
+                    self.pickup()
             
-    def attack(self, u):
+    def attack(self, u: 'Creature'):
         blocked = random.random() < u.block/10
         if self.icon == '@':
             if blocked:
@@ -232,6 +245,16 @@ class Creature(GameObject):
             if stat == 'block':
                 total += delta
         return total
+
+    @property
+    def vision_distance(self):
+        total = self._base_vision_distance
+        for mod in self.modifiers:
+            stat, delta = mod.split()
+            delta = int(delta)
+            if stat == 'vision':
+                total += delta
+        return total
         
     @property
     def hp(self):
@@ -297,6 +320,8 @@ class Creature(GameObject):
             # setting duration
             self._statuses[status] = 100
         elif status == 'bleeding':
+            if self.icon == '@':
+                self.zone.add_message('You start to bleed.')
             # setting duration
             self._statuses[status] = 50
         else: #HACK making these not expire

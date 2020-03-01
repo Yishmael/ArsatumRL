@@ -1,7 +1,7 @@
 import random
 
 from .pane import Pane
-from utils import get_dir
+from utils import get_dir, WIDTH, HEIGHT
 from item import Item
 
 class State:
@@ -11,7 +11,7 @@ class State:
 
 class Inventory(Pane):
     def __init__(self, unit, items=[]):
-        super(Inventory, self).__init__(32, 8)
+        super(Inventory, self).__init__(WIDTH - 33, 8)
         self.unit = unit
         self._items = list(items)
         self.shown = False
@@ -42,7 +42,10 @@ class Inventory(Pane):
                     self.unit.zone.add_message(f'You fill {name} with {value}.')
                     break
             else:
-                self.unit.zone.add_message('You wash your face in the fountain.')
+                if self.unit.icon == '@':
+                    self.unit.zone.add_message('You wash your face in the fountain.')
+                else:
+                    self.unit.zone.add_message(f'{self.unit} washes their face in the fountain.')
     
     @property
     def items(self):
@@ -84,7 +87,7 @@ class Inventory(Pane):
                 self.scroll_y = min(max(0, len(self._items)-self.h+4), self.scroll_y+1)
             elif key == 'up':
                 self.scroll_y = max(0, self.scroll_y-1)
-            elif key == 'enter':
+            elif key == 'ctrl_l':
                 self._items.clear()
                 self.scroll_y = 0
                 self.unit.zone.add_message('Backpack cleared.')
@@ -164,6 +167,8 @@ class Inventory(Pane):
         # TODO take into account other items' temperature
         for item in self.items:
             item.update_temperature(self.unit.temperature)
+            if 'duration' in dir(item):
+                item.duration -= 1
 
         for item in list(self.items):
             if item.broken:

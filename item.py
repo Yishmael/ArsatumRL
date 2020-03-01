@@ -45,9 +45,11 @@ class Item:
             self.icon = ','
         elif 'torch' in name:
             self.mass = 0.3
-            self._duration = 360
+            self.duration = 360
             self.modifiers.append('damage +1')
             self.slot = 'weapons/shields'
+            if self.name == 'lit torch':
+                self.modifiers.append('vision +5')
         elif 'boots' in name:
             self.mass = 0.7
             self.slot = 'feet'
@@ -57,7 +59,7 @@ class Item:
         if 'potion' in self.name:
             s += f'{self.name} (qty:{self.quantity}) '
         elif 'torch' in self.name:
-            s += f'{self.name} (dur:{self._duration}) '
+            s += f'{self.name} (dur:{self.duration}) '
         elif self.mass != 0:
             s += f'{self.name} ({self.mass}kg) '
         else:

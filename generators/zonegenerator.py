@@ -23,7 +23,7 @@ class ZoneGenerator:
             x, y = random.choice(x_range), random.choice(y_range)
             if self.zone.get_tile_at(x, y).icon != '.':
                 continue
-            if len(self.zone.units) < 3:
+            if len(self.zone.units) < WIDTH * HEIGHT // 200:
                 self.zone.units.append(Creature(self.zone, 'cave bat', x, y, []))
 
     def _place_items(self):
@@ -33,7 +33,7 @@ class ZoneGenerator:
             x, y = random.choice(x_range), random.choice(y_range)
             if self.zone.get_tile_at(x, y).icon != '.':
                 continue
-            if len(self.zone.items) < 3:
+            if len(self.zone.items) < WIDTH * HEIGHT // 200:
                 name = random.choice(['hearty meal', 'stick', 'shovel'])
                 self.zone.place_item(Item(name, x, y))
 

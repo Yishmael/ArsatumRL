@@ -5,7 +5,7 @@ import random
 
 from experimental.console import Console
 from objects import Creature
-from utils import apply_fov, clear
+from utils import Vision, clear
 from gui.shop import Shop
 from gui.journal import Journal
 from gui.log import Log
@@ -34,14 +34,8 @@ class World:
         self.zone_id = 0
         self.zone = self.zones[self.zone_id]
         self.player = Creature(self.zone, 'You', 15, 5, 
-                [Item(i) for i in ['unlit torch', 'green potion', 'water potion', 'scroll of alchemy']])
+                [Item(i) for i in ['green potion', 'water potion', 'scroll of alchemy']])
         self.zone.units.append(self.player)
-
-    # def spawn(self, name, x, y, zone_id=None, items=[]):
-    #     if zone_id is None:
-    #         zone_id = self.zone_id
-    #     zone = self.zones[zone_id]
-    #     zone.units.append(Creature(zone, name, x, y, items))
 
     def tick(self):
         self.zone.tick()
@@ -71,7 +65,16 @@ class World:
         for u in self.zone.units:
             if u.icon:
                 self.display[u.y][u.x] = u.icon
-        # apply_fov(self.player, self.display, 3)
+        
+        vision = Vision(self.display)
+        vision.add_source((self.player.x, self.player.y), self.player.vision_distance)
+        for unit in self.zone.units:
+            # vision.add_source((unit.x, unit.y), 1)
+            # vision.add_source((unit.x, unit.y), unit.vision_distance)
+            if unit.icon == 'r':
+                vision.add_line(unit, self.player)
+        # vision.apply()
+
         self.apply_pane()
 
         #curses

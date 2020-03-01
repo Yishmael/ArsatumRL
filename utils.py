@@ -2,6 +2,7 @@ import math
 import os
 import sys
 
+
 WIDTH, HEIGHT = 65, 12
 # WIDTH, HEIGHT = 165, 40
 
@@ -102,31 +103,113 @@ def get_dir(key):
     elif key == 'page_down':
         return (1, 1)
 
-def apply_fov(player, display, radius=1):
-    if radius == 1:        
-        for y in range(len(display)):
-            for x in range(len(display[0])):
-                if abs(x - player.x) > 1:
-                    if abs(x - player.x) > 1:
-                        display[y][x] = ' '
-                if abs(y - player.y) > 1:
-                    if abs(y - player.y) > 1:
-                        display[y][x] = ' '
-    elif radius == 2:
-        for y in range(len(display)):
-            for x in range(len(display[0])):
-                dist = math.hypot(x-player.x, y-player.y)
-                if dist > radius:
-                    display[y][x] = ' '
-    elif radius == 3:
-        for y in range(len(display)):
-            for x in range(len(display[0])):
-                if y == player.y:
-                    if abs(x-player.x) > 3:
-                        display[y][x] = ' '
-                elif x == player.x:
-                    if abs(y-player.y) > 2:
-                        display[y][x] = ' '
-                else:
-                    if abs(x-player.x) > 2 or abs(y-player.y) > 1:
-                        display[y][x] = ' '
+class Vision:
+    def __init__(self, display):
+        self.old_display = [list(display[i]) for i in range(len(display))]
+        self.display = display
+        self.points = []
+
+    def add_source(self, center, radius):
+        center = Vector(center[0], center[1])
+        if radius == 1:        
+            for y in range(len(self.display)):
+                for x in range(len(self.display[0])):
+                    if abs(x - center.x) <= 1:
+                        if abs(y - center.y) <= 1:
+                            if abs(y - center.y) <= 1:
+                                self.points.append(Vector(x, y))
+        elif radius == 2:
+            for y in range(len(self.display)):
+                for x in range(len(self.display[0])):
+                    dist = math.hypot(x-center.x, y-center.y)
+                    if dist <= radius:
+                        self.points.append(Vector(x, y))
+        elif radius == 3:
+            for y in range(len(self.display)):
+                for x in range(len(self.display[0])):
+                    if y == center.y:
+                        if abs(x-center.x) <= 3:
+                            self.points.append(Vector(x, y))
+                    elif x == center.x:
+                        if abs(y-center.y) <= 2:
+                            self.points.append(Vector(x, y))
+                    else:
+                        if abs(x-center.x) <= 2 and abs(y-center.y) <= 1:
+                            self.points.append(Vector(x, y))
+        else:
+            for y in range(len(self.display)):
+                for x in range(len(self.display[0])):
+                    if math.hypot(x - center.x, (y - center.y)*1.3) <= radius:
+                        self.points.append(Vector(x, y))
+
+    def add_line(self, source, target):
+        for point in get_line_points(Vector(source.x, source.y), Vector(target.x, target.y)):
+            self.points.append(point)
+                        
+    def apply(self):
+        for y in range(len(self.display)):
+            for x in range(len(self.display[0])):
+                self.display[y][x] = ' '
+        for point in self.points:
+            x, y = point.x, point.y
+            self.display[y][x] = self.old_display[y][x]
+    
+# TODO fix line missing when points are close to each other
+def get_line_points(point_a: Vector, point_b: Vector):
+    points = []
+    grid = [list(['.']*WIDTH) for _ in range(HEIGHT)]
+    
+    point_b.x = min(WIDTH-3, max(0, point_b.x))
+    point_b.y = min(HEIGHT-3, max(0, point_b.y))
+
+    x1, y1 = point_a.x, point_a.y
+    x2, y2 = point_b.x, point_b.y
+
+    grid[y1][x1] = 'A'
+    grid[y2][x2] = 'B'
+
+    if y1 == y2: # horizontal line
+        for x in range(min(x1, x2), max(x1, x2)):
+            grid[y1][x] = '>'
+            points.append(Vector(x, y1))
+        # print()
+    elif x1 == x2: # vertical line
+        for y in range(min(y1, y2), max(y1, y2)):
+            grid[y][x1] = '^'
+            points.append(Vector(x1, y))
+        # print()
+    else:
+        slope = (y2 - y1) / (x2 - x1)
+        s = sign(slope)
+        b = int(y2 - slope*x2)
+        if abs(slope) < 1: # predominantly horizontal
+            for x in range(min(x1, x2), max(x1, x2)):
+                y_curr = slope*x + b
+                y_next = slope*(x+s) + b
+                hyp = math.hypot(1, y_next-y_curr)
+                # if x == 9:
+                #     print(y_curr, y_next, hyp)
+                if hyp > 1:
+                    grid[int(y_curr)][x] = '#'
+                    points.append(Vector(x, int(y_curr)))
+                # grid[int(y_curr+s)][x] = 'h'
+        elif abs(slope) > 1: # predominantly vertical
+            for y in range(min(y1, y2), max(y1, y2)):
+                x_curr = (y - b)/slope
+                x_next = (y+s - b)/slope
+                hyp = math.hypot(1, x_next-x_curr)
+                # if y == 3:
+                #     print(x_curr, x_next, hyp)
+                if hyp > 1:
+                    grid[y][int(x_curr)] = '#'
+                    points.append(Vector(int(x_curr), y))
+                # grid[y+s][int(x_curr+s)] = 'v'
+        else: # diagonal
+            for x in range(min(x1, x2), max(x1, x2)+1):
+                y = int(slope*x + b)
+                grid[y][x] = 'd'
+        # print(f'B:({x2},{y2}), dy/dx:{slope}, b:{b}')
+
+    # print('\n'.join(''.join(row) for row in grid))
+
+    return points

@@ -31,16 +31,16 @@ class InputSystem:
         self.entities = entities
     def update(self, key):
         ent = self.entities[0]
-        phys = ent.get_comp(TransformComponent)
+        trans = ent.get_comp(TransformComponent)
         inv = ent.get_comp(InventoryComponent)
         key = 'i'
         if inv.shown:
             inv.shown = False
         elif key == 'i':
             inv.shown = True
-        elif key == 'e' and state == 0:
+        elif key == 'e':# and state == 0:
             print('move right')
-            phys.x += 1
+            trans.x += 1
 
 class AiSystem:
     def __init__(self, entities):
@@ -52,21 +52,21 @@ class AiSystem:
                 continue
             ent = entities[ai.entity]
             if ai.type_ == 'patrol': # move between point_a and point_b
-                phys = ent.get_comp(TransformComponent)
-                x, y = phys.x, phys.y
+                trans = ent.get_comp(TransformComponent)
+                x, y = trans.x, trans.y
                 if ai.current_point == ai.point_a:
                     direction = get_direction((x, y), (ai.point_b.x, ai.point_b.y))
-                    phys.x += direction.x
-                    phys.y += direction.y
-                    if Vector(phys.x, phys.y) == ai.point_b:
+                    trans.x += direction.x
+                    trans.y += direction.y
+                    if Vector(trans.x, trans.y) == ai.point_b:
                         ai.current_point = ai.point_b
                 elif ai.current_point == ai.point_b:
                     direction = get_direction((x, y), (ai.point_a.x, ai.point_a.y))
-                    phys.x += direction.x
-                    phys.y += direction.y
-                    if Vector(phys.x, phys.y) == ai.point_a:
+                    trans.x += direction.x
+                    trans.y += direction.y
+                    if Vector(trans.x, trans.y) == ai.point_a:
                         ai.current_point = ai.point_a
-                print(f'E{ai.entity}', phys.x, phys.y)
+                print(f'E{ai.entity}', trans.x, trans.y)
 
 if 'idlelib' not in sys.modules:
     os.system('cls')
@@ -86,21 +86,11 @@ ent.add_comp(HealthComponent(1, 100))
 ent.add_comp(StatusComponent(1))
 entities.append(ent)
 
-# update InputComponent
-# update AiComponent
-# update PhysComponent
-
-phys_comps = [entity.get_comp(TransformComponent) for entity in entities]
+trans_comps = [entity.get_comp(TransformComponent) for entity in entities]
 ai_system = AiSystem(entities)
 inp_system = InputSystem(entities)
 # main update loop
 frames = 8
-for _ in range(frames):
-    ai_system.update()
-    #key = input('Key: ')
-    key = ''
-    #inp_system.update(key)
-
 for _ in range(frames):
     ai_system.update()
     #key = input('Key: ')

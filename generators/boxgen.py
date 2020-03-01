@@ -35,7 +35,7 @@ class Box:
             self.y <= y <= self.y + self.h and x in [self.x, self.x + self.w]
 
     def get_walls(self, allow_edges=False):
-        l = []
+        walls = []
         for x in range(self.x, self.x + self.w + 1):
             for y in range(self.y, self.y + self.h + 1):
                 if not (0 <= x < WIDTH and 0 <= y < HEIGHT):
@@ -45,18 +45,25 @@ class Box:
                         if (x, y) in [(self.x, self.y), (self.x + self.w, self.y), 
                                       (self.x, self.y + self.h), (self.x + self.w, self.y + self.h)]:
                             continue
-                    l.append(Vector(x, y))
-        return l
+                    walls.append(Vector(x, y))
+        return walls
 
     def get_wall(self, allow_edges=False):
-        l = self.get_walls(allow_edges)
-        return random.choice(l)
+        walls = self.get_walls(allow_edges)
+        return random.choice(walls)
+
+    def get_icon(self, x, y):
+        for wall in self.get_walls(True):
+            if wall == Vector(x, y):
+                if self.door == wall:
+                    return '.'
+        return '#'
 
     def intersects(self, box: 'Box'):
         if box.y + box.h < self.y or box.x + box.w < self.x or \
             self.y + self.h < box.y or self.x + self.w < box.x:
             return False
-        return True       
+        return True
     
 class BoxGen(ZoneGenerator):
     def generate(self):
