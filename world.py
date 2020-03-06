@@ -1,16 +1,17 @@
 import os
+import random
 import sys
 import time
-import random
 
 from experimental.console import Console
-from objects import Creature
-from utils import Vision, clear
-from gui.shop import Shop
+from generators.worldgenerator import WorldGenerator
 from gui.journal import Journal
 from gui.log import Log
-from item import Item 
-from generators.worldgenerator import WorldGenerator
+from gui.shop import Shop
+from item import Item
+from objects import Creature
+from utils import Vision, clear
+from gui.achievements import AchievementsPane
 
 class World:
     def __init__(self, width, height):
@@ -22,8 +23,9 @@ class World:
         self.show_shop = False
         self.journal = Journal(self)
         self.show_journal = False
+        self.achiev_pane = AchievementsPane(self)
+        self.show_achiev_pane = False
         self.log = Log()
-        self.display = None
         self.turn_count = 0
         self.ground_items = []
 
@@ -36,13 +38,12 @@ class World:
         self.player = Creature(self.zone, 'You', 15, 5, 
                 [Item(i) for i in ['green potion', 'water potion', 'scroll of alchemy']])
         self.zone.units.append(self.player)
+        self.display = list(list(row) for row in self.zone.get_grid())
+        self.vision = Vision(self.display)
 
     def tick(self):
         self.zone.tick()
         for u in list(self.zone.units):
-            for item in self.zone.get_items_in_range(u.x, u.y, 0):
-                if item.name == 'glass shard':
-                    item.affect_unit(u, 'stepped on')
             if not u.dead:
                 u.tick()
             else:
@@ -50,13 +51,17 @@ class World:
                     self.zone.add_message('You die.')
                 else:
                     self.zone.add_message(f'{u} dies.')
+                self.achiev_pane.deaths += 1
                 u.destroyed = True
          
         self.zone.cleanup()
         self.ground_items = self.zone.get_items_in_range(self.player.x, self.player.y, 0)
 
     def draw(self):
-        self.display = list(list(row) for row in self.zone.get_grid())
+        for idx, row in enumerate(self.zone.get_grid()):
+            self.display[idx] = list(row)
+
+        #self.display = list(list(row) for row in self.zone.get_grid())
         for i in self.zone.items:
             if i.icon:
                 self.display[i.y][i.x] = i.icon
@@ -66,14 +71,14 @@ class World:
             if u.icon:
                 self.display[u.y][u.x] = u.icon
         
-        vision = Vision(self.display)
-        vision.add_source((self.player.x, self.player.y), self.player.vision_distance)
+        self.vision.reset()
+        self.vision.add_source((self.player.x, self.player.y), self.player.vision_distance)
         for unit in self.zone.units:
             # vision.add_source((unit.x, unit.y), 1)
             # vision.add_source((unit.x, unit.y), unit.vision_distance)
             if unit.icon == 'r':
-                vision.add_line(unit, self.player)
-        # vision.apply()
+                self.vision.add_line(unit, self.player)
+        self.vision.apply()
 
         self.apply_pane()
 
@@ -85,14 +90,15 @@ class World:
         # with open('display.txt', 'w') as f:
         #     f.write('\n'.join(''.join(row) for row in self.display))
 
-        if self.ground_items and self.player.has_just_moved():
-            self.log.add_message(f'You see {self.ground_items} at your feet.')
-        staircase = self.zone.get_staircase_at(self.player.x, self.player.y)
-        if staircase:
-            if staircase.get_icon(self.zone_id) == '>':
-                self.log.add_message(f'You see stairs leading down.')
-            else:
-                self.log.add_message(f'You see stairs leading up.')
+        if self.player.has_just_moved():
+            staircase = self.zone.get_staircase_at(self.player.x, self.player.y)
+            if staircase:
+                if staircase.get_icon(self.zone_id) == '>':
+                    self.log.add_message(f'You see stairs leading down.')
+                else:
+                    self.log.add_message(f'You see stairs leading up.')
+            if self.ground_items:
+                self.log.add_message(f'You see {self.ground_items} at your feet.')
 
         print(self.log.get_last_message())
         print(', '.join([f'HP:{self.player.hp:.0f}', f'XP:{self.player.exp}', 
@@ -125,6 +131,9 @@ class World:
                 self.player.x, self.player.y = x, y
                 self.log.add_message(f'Temperature is {self.zone.temperature}°C.')
                 break
+            self.set_zone_id(zone_id+1)
+            self.player.x, self.player.y = 0, 0
+
 
     def update(self, advance_turn):
         if advance_turn:
@@ -148,3 +157,5 @@ class World:
             self.journal.apply_on(self.display)
         elif self.log.shown:
             self.log.apply_on(self.display)
+        elif self.achiev_pane.shown:
+            self.achiev_pane.apply_on(self.display)

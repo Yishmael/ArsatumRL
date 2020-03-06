@@ -4,15 +4,12 @@ import random
 import sys
 import time
 
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils import clear, Vector, get_direction
+from generators.zone import Zone
+from generators.zonegenerator import ZoneGenerator
+from utils import HEIGHT, WIDTH, Vector, clear, get_direction
 
-if __name__ == '__main__':
-    from zonegenerator import ZoneGenerator
-    from zone import Zone
-else:
-    from generators.zonegenerator import ZoneGenerator
-    from generators.zone import Zone
 
 class Box:
     def __init__(self, x, y, w, h):
@@ -25,6 +22,10 @@ class Box:
 
     def __repr__(self):
         return f'({self.x},{self.y})'
+
+    @property
+    def center(self):
+        return Vector(self.x + self.w//2, self.y + self.h//2)
 
     def contains(self, x, y):
         return self.x <= x <= self.x + self.w and \
@@ -64,14 +65,24 @@ class Box:
             self.y + self.h < box.y or self.x + self.w < box.x:
             return False
         return True
+
+    def apply_on(self, grid):
+        for y in range(HEIGHT):
+            for x in range(WIDTH):
+                if self.touches(x, y):
+                    grid[y][x] = self.icon
+                elif self.contains(x, y):
+                    grid[y][x] = '.'
+
     
 class BoxGen(ZoneGenerator):
     def generate(self):
-        random.seed(10)
-        grid = [list(['.']*self.width) for _ in range(self.height)]
-        boxes = [Box(2 + random.randint(0, WIDTH-10), random.randint(0, HEIGHT-5), 
-                random.randint(6, 10), random.randint(3, 5)) for _ in range(20)]
-
+        # random.seed(12)
+        grid = [list([' ']*self.width) for _ in range(self.height)]
+        max_width = 30
+        max_height = 10
+        boxes = [Box(random.randint(0, WIDTH-max_width), random.randint(0, HEIGHT-max_height),
+                     random.randint(7, max_width), random.randint(4, max_height)) for _ in range(30)]
         for box1 in list(boxes):
             for box2 in list(boxes):
                 if box1 is not box2:
@@ -80,32 +91,36 @@ class BoxGen(ZoneGenerator):
                             # continue
                             boxes.remove(box1)
 
-        for y in range(HEIGHT):
-            for x in range(WIDTH):
-                for box in boxes[:]:
-                    if box.touches(x, y):
-                        grid[y][x] = box.icon
-
         for box in boxes:
-            x, y = box.get_wall()
-            grid[y][x] = '+'
-            box.door = Vector(x, y)
+            box.apply_on(grid)
         
-        # for box1, box2 in zip(boxes, boxes[1:]):
-        #     door1 = box1.door
-        #     door2 = box2.door
-        #     x, y = door1.x, door1.y
-        #     while True:
-        #         dx, dy = get_direction((x, y), (door2.x, door2.y))
-        #         x, y = x + dx, y + dy
-        #         grid[y][x] = 'x'
-        #         if (x, y) == (door2.x, door2.y):
-        #             break
+        for box1, box2 in zip(boxes, boxes[1:]):
+            x, y = box1.center.x, box1.center.y
+            while True:
+                dx, dy = get_direction((x, y), (box2.center.x, box2.center.y))
+                if random.random() < 0.5:
+                    dx = 0
+                else:
+                    dy = 0
+                x, y = x + dx, y + dy
+                grid[y][x] = '.'
+                if box2.touches(x, y):
+                    break
+
+        # border
+        for y in range(1, HEIGHT - 1):
+            for x in range(1, WIDTH - 1):
+                if grid[y][x] == ' ':
+                    if '.' in [grid[y-1][x], grid[y+1][x], grid[y][x-1], grid[y][x+1],
+                               grid[y-1][x-1], grid[y-1][x+1], grid[y+1][x-1], grid[y+1][x+1]]:
+                        grid[y][x] = '#'
+
                 
         self.zone = Zone(grid, [], [], self._temperature)
 
-WIDTH, HEIGHT = 65, 42
 if __name__ == '__main__':
+    WIDTH, HEIGHT = 165, 40
+    # WIDTH, HEIGHT = 65, 42
     clear()
     gen = BoxGen(WIDTH, HEIGHT)
     gen.generate()

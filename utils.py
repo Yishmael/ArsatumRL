@@ -3,7 +3,7 @@ import os
 import sys
 
 
-WIDTH, HEIGHT = 65, 12
+WIDTH, HEIGHT = 65, 15
 # WIDTH, HEIGHT = 165, 40
 
 def get_icon(name):
@@ -30,7 +30,9 @@ def get_icon(name):
     elif 'puddle' in name:
         return '~'
     elif 'glass shard' in name:
-        return ''
+        return ','
+    elif 'cloud' in name:
+        return '*'
     else:
         return '('
 
@@ -105,28 +107,27 @@ def get_dir(key):
 
 class Vision:
     def __init__(self, display):
-        self.old_display = [list(display[i]) for i in range(len(display))]
         self.display = display
         self.points = []
 
     def add_source(self, center, radius):
         center = Vector(center[0], center[1])
         if radius == 1:        
-            for y in range(len(self.display)):
-                for x in range(len(self.display[0])):
+            for y in range(HEIGHT):
+                for x in range(WIDTH):
                     if abs(x - center.x) <= 1:
                         if abs(y - center.y) <= 1:
                             if abs(y - center.y) <= 1:
                                 self.points.append(Vector(x, y))
         elif radius == 2:
-            for y in range(len(self.display)):
-                for x in range(len(self.display[0])):
+            for y in range(HEIGHT):
+                for x in range(WIDTH):
                     dist = math.hypot(x-center.x, y-center.y)
                     if dist <= radius:
                         self.points.append(Vector(x, y))
         elif radius == 3:
-            for y in range(len(self.display)):
-                for x in range(len(self.display[0])):
+            for y in range(HEIGHT):
+                for x in range(WIDTH):
                     if y == center.y:
                         if abs(x-center.x) <= 3:
                             self.points.append(Vector(x, y))
@@ -137,8 +138,8 @@ class Vision:
                         if abs(x-center.x) <= 2 and abs(y-center.y) <= 1:
                             self.points.append(Vector(x, y))
         else:
-            for y in range(len(self.display)):
-                for x in range(len(self.display[0])):
+            for y in range(HEIGHT):
+                for x in range(WIDTH):
                     if math.hypot(x - center.x, (y - center.y)*1.3) <= radius:
                         self.points.append(Vector(x, y))
 
@@ -147,12 +148,16 @@ class Vision:
             self.points.append(point)
                         
     def apply(self):
-        for y in range(len(self.display)):
-            for x in range(len(self.display[0])):
+        old_display = list(list(row) for row in self.display)
+        for y in range(HEIGHT):
+            for x in range(WIDTH):
                 self.display[y][x] = ' '
         for point in self.points:
             x, y = point.x, point.y
-            self.display[y][x] = self.old_display[y][x]
+            self.display[y][x] = old_display[y][x]
+            
+    def reset(self):
+        self.points.clear()
     
 # TODO fix line missing when points are close to each other
 def get_line_points(point_a: Vector, point_b: Vector):

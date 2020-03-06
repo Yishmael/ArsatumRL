@@ -1,20 +1,18 @@
-import os
-import sys
 import json
+import os
 import random
+import sys
 
+from generators.blankgen import BlankGen
+from generators.boxgen import BoxGen
+from generators.snailgen import SnailGen
+from generators.staircase import Staircase
+from generators.towngen import TownGen
+from generators.spawners import Spawner
+from utils import HEIGHT, WIDTH, clear
+
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils import clear, WIDTH, HEIGHT
-if __name__ == '__main__':
-    from snailgen import SnailGen
-    from towngen import TownGen
-    from blankgen import BlankGen
-    from staircase import Staircase
-else:
-    from generators.snailgen import SnailGen
-    from generators.towngen import TownGen
-    from generators.blankgen import BlankGen
-    from generators.staircase import Staircase
 
 class WorldGenerator:
     def __init__(self, width, height):
@@ -29,7 +27,9 @@ class WorldGenerator:
         #     json.dump(self.graph, f, indent=2)
         self.generators = {'town': TownGen(self.width, self.height),
                            'snail': SnailGen(self.width, self.height),
-                           'blank': BlankGen(self.width, self.height)}
+                           'blank': BlankGen(self.width, self.height),
+                           'box': BoxGen(self.width, self.height)}
+        self.spawners = {'default': Spawner(1.5)}
         
     def _generate_zones(self):
         self.zones = {}
@@ -42,6 +42,10 @@ class WorldGenerator:
             zone = gen.zone
             zone.id = int(zone_id)
             zone.temperature = 5 - 10*int(zone_id)
+            spawner = self.spawners.get(self.graph['spawners'].get(zone_id, None), None)
+            if spawner:
+                spawner.spawn_units(zone)
+                spawner.spawn_items(zone)
             zone.init()
             self.zones[zone.id] = zone
             

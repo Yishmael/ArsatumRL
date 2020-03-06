@@ -1,5 +1,4 @@
 import random
-from collections import defaultdict
 
 from utils import (
     sign, distance_between_points, get_direction, WIDTH, HEIGHT, get_icon, 
@@ -69,9 +68,9 @@ class Creature(GameObject):
             self._hp = 30
             self._base_damage = 1
             self.exp_reward = 0
-            self._base_vision_distance = 1
+            self._base_vision_distance = 100
             self.char_pane.equip(Item('leather boots'))
-            self.char_pane.equip(Item('lit torch'))
+            # self.char_pane.equip(Item('lit torch'))
         elif self.name == 'white rat':
             self._hp = 2
             self._base_vision_distance = 3
@@ -125,12 +124,12 @@ class Creature(GameObject):
             if '@' in [self.icon, u.icon]:
                 self.attack(u)
             break
-        if not within_bounds(x, y):
-            return
-        tile = self.zone.get_tile_at(x, y)
-
-        if self.icon == '@' and tile.terrain_icon.isdigit():
-            self.show_shop = True
+        # TODO move shops to a separate place and open them elsewhere
+        # if not within_bounds(x, y):
+        #     return
+        # tile = self.zone.get_tile_at(x, y)
+        # if self.icon == '@' and tile.terrain_icon.isdigit():
+        #     self.show_shop = True
 
     def sees(self, o):
         points = get_line_points(Vector(self.x, self.y), Vector(o.x, o.y))
@@ -142,6 +141,7 @@ class Creature(GameObject):
 
     def tick(self):
         self.inv.tick()
+        self.char_pane.tick()
         # self.temperature += (37 - self.temperature) * 0.01
         if 'poisoned' in self.statuses:
             self.food -= 0.1 * (1 - self.resistance.poison)
@@ -155,24 +155,24 @@ class Creature(GameObject):
                 del self.statuses[status]
 
         if self.icon != '@':
-            if self.zone.player:
-
-                if distance_between(self, self.zone.player) <= self.vision_distance and \
-                        self.sees(self.zone.player):
-                    self.move_toward_object(self.zone.player)
-                    if self.icon == 'r':
-                        self.zone.add_message('I see you!')
-                    elif random.random() < 0.05:
-                        self.move_delta(random.randint(-1, 1), random.randint(-1, 1))
-                elif self.icon == 'r':
-                    for item in self.zone.get_items_in_range(self.x, self.y, self.vision_distance):
-                        if self.sees(item):
-                            if 'meal' in item.name:
-                                self.move_toward_object(item)
-                            break
-                else:
-                    self.move_idle()
-                    self.pickup()
+            if distance_between(self, self.zone.player) <= self.vision_distance and \
+                    self.sees(self.zone.player):
+                self.move_toward_object(self.zone.player)
+                if random.random() < 0.05:
+                    self.move_delta(random.randint(-1, 1), random.randint(-1, 1))
+            else:
+                for item in self.zone.get_items_in_range(self.x, self.y, self.vision_distance):
+                    if self.sees(item):
+                        if 'meal' in item.name:
+                            self.move_toward_object(item)
+                        break
+            if True:
+                # self.move_idle()
+                # for item in list(self.inv.items):
+                #     if item.slot in self.char_pane.slots:
+                #         self.char_pane.equip(item)
+                #         self.inv.items.remove(item)
+                self.pickup()
             
     def attack(self, u: 'Creature'):
         blocked = random.random() < u.block/10
@@ -195,21 +195,22 @@ class Creature(GameObject):
                 if self.icon == 'C':
                     if random.random() < 1.1:
                         u.add_status('bleeding')
-        if u.hp <= 0:
+        if u.dead:
             self.exp += u.exp_reward
         self.stamina -= 1
 
     def pickup(self):
-        for item in list(self.zone.items):
-            if (item.x, item.y) == (self.x, self.y):
-                if not item.collectable():
-                    continue
-                self.zone.items.remove(item)
+        for item in self.zone.get_items_in_range(self.x, self.y, 0):
+            if not item.collectable:
+                continue
+            if len(self.char_pane.get_items_at_slot('hands')) == 0:
+                if item.temperature < -10:
+                    self.add_status('frostbite')
+            self.zone.items.remove(item)
+            if item.slot in self.char_pane.slots: # auto equip
+                self.char_pane.equip(item)
+            else:
                 self.inv.add_item(item)
-                if self.icon == '@':
-                    self.zone.add_message(f'You pick up {item}.')
-                else:
-                    self.zone.add_message(f'{self} picks up {item}.')
 
     @property
     def dead(self):
@@ -264,9 +265,12 @@ class Creature(GameObject):
     def hp(self, value):
         self._hp = max(0, value)
         if self._hp == 0:
-            for item in self.inv.items:
+            for item in self.inv.items + self.char_pane.get_items():
                 item.x, item.y = self.x, self.y
                 self.zone.place_item(item)
+            self.inv.items.clear()
+            for slot in self.char_pane.items:
+                self.char_pane.items[slot].clear()
 
     @property
     def stamina(self):

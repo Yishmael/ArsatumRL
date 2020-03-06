@@ -3,15 +3,12 @@ import sys
 import time
 import math
 import random
+
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils import sign, get_direction, clear
-
-if __name__ == '__main__':
-    from zonegenerator import ZoneGenerator
-    from zone import Zone
-else:
-    from generators.zonegenerator import ZoneGenerator
-    from generators.zone import Zone
+from generators.zonegenerator import ZoneGenerator
+from generators.zone import Zone
 
 class SnailGen(ZoneGenerator):
     def generate(self, chance=0.2, exponent=0.5, diagonals=False):
@@ -59,8 +56,6 @@ class SnailGen(ZoneGenerator):
 
         self.zone = Zone(grid, [], [], self._temperature)
         self.zone.recommended_stairs_coords = [tuple(stairs_up), tuple(stairs_down)]
-        self._place_units()
-        self._place_items()
 
 if __name__ == '__main__':
     gen = SnailGen(65,12)

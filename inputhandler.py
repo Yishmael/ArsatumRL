@@ -31,14 +31,13 @@ class InputHandler:
         advance_turn = False
         key = key.lower()
         if key == '`':
-            locs = []
-            locs.append(f'@: ({self.world.player.x}, {self.world.player.y})')
+            locs = {'@': []}
             for y in range(HEIGHT):
                 for x in range(WIDTH):
                     tile = self.world.zone.get_tile_at(x, y)
                     if tile.icon not in ['.', '#']:
-                        locs.append(f'{tile.icon}: ({x}, {y})')
-            self.world.log.add_message(', '.join(locs))
+                        locs.setdefault(tile.icon, []).append(f'({x}, {y})')
+            self.world.log.add_message('\n'.join(f'{icon}:{" ".join(pos)}' for icon, pos in locs.items()))
         elif key == 'esc':
             if not (self.world.player.inv.shown or self.world.show_shop or self.world.player.char_pane.shown or \
                     self.world.show_journal or self.world.log.shown):
@@ -57,6 +56,8 @@ class InputHandler:
             self.world.journal.recv_key(key)
         elif self.world.log.shown:
             self.world.log.recv_key(key)
+        elif self.world.achiev_pane.shown:
+            self.world.achiev_pane.recv_key(key)
         elif key in ['home', 'up', 'page_up', 'left', 'right', 'end', 'down', 'page_down']:
             advance_turn = True
             self.world.player.move_delta(get_dir(key)[0], get_dir(key)[1])
@@ -72,6 +73,8 @@ class InputHandler:
             self.world.show_journal = True
         elif key == 'l':
             self.world.log.shown = True
+        elif key == 'n':
+            self.world.achiev_pane.shown = True
         elif key == 'v':
             if self.world.player._base_vision_distance == 100:
                 self.world.player._base_vision_distance = 1
@@ -97,3 +100,4 @@ class InputHandler:
         self.world.player.char_pane.shown = False
         self.world.show_journal = False
         self.world.log.shown = False
+        self.world.achiev_pane.shown = False

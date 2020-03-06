@@ -1,6 +1,10 @@
 import random
+from itertools import permutations
 
-from utils import distance_between_points, clear, get_icon, WIDTH, HEIGHT
+from utils import (
+    distance_between, clear, get_icon, Vector, within_bounds, 
+    distance_between_points, WIDTH, HEIGHT
+)
 from generators.staircase import Staircase
 from objects import Creature
 from item import Item
@@ -24,7 +28,7 @@ class Zone:
         locs = []
         for y in range(HEIGHT):
             for x in range(WIDTH):
-                if self.get_tile_at(x, y).terrain_icon != '#':
+                if self.get_tile_at(x, y).terrain_icon not in ['#', ' ']:
                     if not self.get_staircase_at(x, y):
                         locs.append((x, y))
         x, y = random.choice(locs)
@@ -36,6 +40,14 @@ class Zone:
 
     def __repr__(self):
         return f'Zone-{self.id}'
+
+    @property
+    def width(self):
+        return len(self._grid[0])
+
+    @property
+    def height(self):
+        return len(self._grid)
 
     @property
     def player(self):
@@ -63,8 +75,20 @@ class Zone:
     def tick(self):
         for unit in self.units:
             unit.update_temperature(self.temperature)
+            for item in self.get_items_in_range(unit.x, unit.y, 0):
+                item.affect_unit(unit, 'stepped')
+
         for item in list(self.items):
             item.update_temperature(self.temperature)
+            item.tick()
+            if item.name == 'green puddle':
+                offsets = list(set(permutations([-1, -1, 0, 0, 1, 1], 2)))
+                random.shuffle(offsets)
+                x, y = item.x + offsets[0][0], item.y + offsets[0][1]
+                if within_bounds(x, y):
+                    if 'poison cloud' not in [item.name for item in self.get_items_in_range(x, y, 0)]:
+                        self.items.append(Item('poison cloud', x, y))
+                        item.quantity -= 1
             if item.broken:
                 pieces = item.pieces
                 for piece in pieces:
@@ -75,7 +99,8 @@ class Zone:
     def cleanup(self):
         for unit in list(self.units):
             if unit.destroyed:
-                self.units.remove(unit)
+                if unit.icon != '@':
+                    self.units.remove(unit)
         for item in list(self.items):
             if item.destroyed:
                 self.items.remove(item)
@@ -120,6 +145,11 @@ class Zone:
         tile.walkable = tile.terrain_icon == '.' and not tile.units
 
         return tile
+
+    def emit_sound(self, x, y, range):
+        for unit in self.units:
+            if distance_between_points((x, y), (unit.x, unit.y)) <= range:
+                pass
 
     def get_grid(self):
         return self._grid
@@ -166,4 +196,7 @@ class Tile:
         self.items = []
         self.terrain_icon = ''
         self.icon = ''
+        
+    def __repr__(self):
+        return f'Tile({self.icon} {self.terrain_icon})'
         

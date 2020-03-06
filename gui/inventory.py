@@ -1,7 +1,7 @@
 import random
 
 from .pane import Pane
-from utils import get_dir, WIDTH, HEIGHT
+from utils import get_dir, WIDTH
 from item import Item
 
 class State:
@@ -23,6 +23,8 @@ class Inventory(Pane):
         return ', '.join(item.name for item in self._items)
 
     def add_item(self, item):
+        if self.unit.icon == '@':
+            self.unit.zone.add_message(f'You obtain {item}.')
         self._items.append(item)
 
     def add_items(self, items):
@@ -41,11 +43,9 @@ class Inventory(Pane):
                     item.fill(value)
                     self.unit.zone.add_message(f'You fill {name} with {value}.')
                     break
-            else:
+            else: # no item to refill
                 if self.unit.icon == '@':
                     self.unit.zone.add_message('You wash your face in the fountain.')
-                else:
-                    self.unit.zone.add_message(f'{self.unit} washes their face in the fountain.')
     
     @property
     def items(self):
@@ -110,9 +110,11 @@ class Inventory(Pane):
                     self.selected_item = None
                     self.state = State.DEFAULT
                 elif action == 'equip':
-                    self.unit.zone.add_message(f'You equip {self.selected_item}.')
-                    self.unit.char_pane.equip(self.selected_item)
-                    self.items.remove(self.selected_item)
+                    if self.selected_item.slot in self.unit.char_pane.slots:
+                        self.unit.char_pane.equip(self.selected_item)
+                        self.items.remove(self.selected_item)
+                    else:
+                        self.unit.zone.add_message(f'You can\'t equip that.')
                     self.selected_item = None
                     self.state = State.DEFAULT
                 elif action in ['eat', 'drink', 'read']:
@@ -167,9 +169,8 @@ class Inventory(Pane):
         # TODO take into account other items' temperature
         for item in self.items:
             item.update_temperature(self.unit.temperature)
-            if 'duration' in dir(item):
-                item.duration -= 1
-
+            item.tick()
+            
         for item in list(self.items):
             if item.broken:
                 pieces = item.pieces

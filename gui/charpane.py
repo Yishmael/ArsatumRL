@@ -1,11 +1,15 @@
 from .pane import Pane
-
+from item import Item
+from utils import WIDTH
 
 class CharPane(Pane):
     def __init__(self, unit):
         Pane.__init__(self, 0, 0)
         self.unit = unit
-        self.slots = ['head', 'chest', 'hands', 'weapons/shields', 'legs', 'feet']
+        if self.unit.icon == '@':
+            self.slots = ['head', 'chest', 'hands', 'weapons/shields', 'legs', 'feet']
+        else:
+            self.slots = ['head', 'feet']
         self.items = {s:[] for s in self.slots}
         self.shown = False
 
@@ -42,25 +46,36 @@ class CharPane(Pane):
             elif stat == 'cold res':
                 value = self.unit.resistance.cold
             text = f'{stat}:'.rjust(20) + str(value)
-            display[2+idx][left+30:left+30+len(text)] = list(text)
+            display[2+idx][left+WIDTH-35:left+WIDTH-35+len(text)] = list(text)
 
         text = 'Press [1-{}] to unequip.'.format(len(self.slots))
         display[self.h-3][left:left+len(text)] = list(text)
         text = 'Press [esc] to close.'
         display[self.h-2][left:left+len(text)] = list(text)
-            
-    def equip(self, item):
-        # self.world.log.add_message(f'You equip {item}.')
+
+    def equip(self, item: Item):
+        if self.unit.icon == '@':
+            self.unit.zone.add_message(f'You equip {item}.')
+        else:
+            self.unit.zone.add_message(f'{self.unit} equips {item}.')
         self.items[item.slot].append(item)
         for mod in item.modifiers:
             self.unit.modifiers.append(mod)
 
     def unequip(self, item):
-        # self.world.log.add_message(f'You unequip {item}.')
         self.items[item.slot].remove(item)
         for mod in item.modifiers:
             self.unit.modifiers.remove(mod)
 
     def get_items_at_slot(self, slot):
-        return self.items[slot]
-            
+        return self.items.get(slot, [])
+    
+    def get_items(self):
+        r  = []
+        for items in self.items.values():
+            r.extend(items)
+        return r
+
+    def tick(self):
+        for item in self.get_items():
+            item.tick()

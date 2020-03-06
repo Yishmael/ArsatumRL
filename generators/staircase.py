@@ -31,7 +31,6 @@ class Staircase:
             message = 'The stairs lead to a brick wall.'
         return message
 
-    # TODO use only zone_id
     def get_exit_location(self, x, y, zone_id):
         if (x, y, zone_id) not in  ((self.x1, self.y1, self.zone_id1), (self.x2, self.y2, self.zone_id2)):
             return None
@@ -53,10 +52,5 @@ class Staircase:
         else:
             # doesn't lead anywhere
             return 'x'
-
-    # @staticmethod
-    # def get_reversed(staircase):
-    #     return Staircase(staircase.x2, staircase.y2, staircase.zone_id2, 
-    #                      staircase.x1, staircase.y1, staircase.zone_id1)
             
         

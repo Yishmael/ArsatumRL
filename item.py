@@ -11,7 +11,6 @@ class Item:
         self.poisonous = False
         self._temperature = 15
         self.icon = get_icon(self.name)
-        self.modifiers = []
         self.slot = ''
         self.broken = False
         self.destroyed = False
@@ -20,6 +19,10 @@ class Item:
             self._quantity = 3
             if 'green potion' in name:
                 self.poisonous = True
+        elif 'green puddle' in name:
+            self._quantity = 3
+        elif 'poison cloud' in name:
+            self._duration = 10
         elif 'flask' in name:
             self.mass = 0.2
             self._quantity = 0
@@ -29,27 +32,20 @@ class Item:
                 self._quantity = 1
         elif 'meal' in name:
             self.mass = 0.1
-            self.quantity = 1
+            self._quantity = 1
         elif 'sweater' in name:
             self.mass = 1
-            self.modifiers.append('armor +1')
             self.slot = 'chest'
         elif 'barrel top' in name:
             self.mass = 3
-            self.modifiers.append('block +1')
             self.slot = 'weapons/shields'
         elif 'stick' in name:
             self.mass = 0.3
             self.slot = 'weapons/shields'
-        elif 'glass shard' in name:
-            self.icon = ','
         elif 'torch' in name:
             self.mass = 0.3
-            self.duration = 360
-            self.modifiers.append('damage +1')
+            self._duration = 50
             self.slot = 'weapons/shields'
-            if self.name == 'lit torch':
-                self.modifiers.append('vision +5')
         elif 'boots' in name:
             self.mass = 0.7
             self.slot = 'feet'
@@ -57,22 +53,38 @@ class Item:
     def __repr__(self):
         s = ''
         if 'potion' in self.name:
-            s += f'{self.name} (qty:{self.quantity}) '
+            s += f'{self.name} (qty:{self.quantity})'
         elif 'torch' in self.name:
-            s += f'{self.name} (dur:{self.duration}) '
+            s += f'{self.name} (dur:{self.duration})'
         elif self.mass != 0:
-            s += f'{self.name} ({self.mass}kg) '
+            s += f'{self.name} ({self.mass}kg)'
         else:
-            s += f'{self.name} '
-        s += f'({self.temperature:.1f})°C'
+            s += f'{self.name}'
+        # s += f' ({self.temperature:.1f})°C'
         return s
 
     def update_temperature(self, ambient_temperature):
         self.temperature += (ambient_temperature - self.temperature) * 0.01
+    
+    def tick(self):
+        self.duration -= 1
 
     @property
     def select_text(self):
         return f'What to do with {self.name}? ' + str(self.actions)
+
+    @property
+    def modifiers(self):
+        modifiers = []
+        if 'sweater' in self.name:
+            modifiers.append('armor +1')
+        elif 'barrel top' in self.name:
+            modifiers.append('block +1')
+        elif 'torch' in self.name:
+            if self.name == 'lit torch':
+                modifiers.append('damage +1')
+                modifiers.append('vision +5')
+        return modifiers
 
     @property
     def actions(self):
@@ -92,6 +104,22 @@ class Item:
         elif 'potion' in self.name:
             actions.update({'e': 'drink', 's': 'spill', 't': 'throw'})
         return actions
+    
+    @property
+    def duration(self):
+        if '_duration' not in dir(self):
+            return 0
+        return self._duration
+
+    @duration.setter
+    def duration(self, value):
+        self._duration = max(0, value)
+        if self._duration == 0:
+            if self.name == 'lit torch':
+                # TODO update user's stars if item changes while equipped
+                self.name = 'unlit torch'
+            elif self.name == 'poison cloud':
+                self.destroyed = True
 
     @property
     def quantity(self):
@@ -99,7 +127,7 @@ class Item:
 
     @quantity.setter
     def quantity(self, value):
-        self._quantity = min(3, max(0, value))
+        self._quantity = min(10, max(0, value))
         if 'potion' in self.name:
             self.mass = 0.2 + self._quantity * 0.2
         if self._quantity == 0:
@@ -108,6 +136,10 @@ class Item:
             elif 'scroll' in self.name:
                 self.name = 'blank scroll'
             elif 'meal' in self.name:
+                self.destroyed = True
+            elif 'green puddle' in self.name:
+                self.destroyed = True
+            elif self.name == 'poison cloud':
                 self.destroyed = True
     
     @property
@@ -173,7 +205,7 @@ class Item:
                             qty = item.quantity
                             item.quantity = 0
                             item.fill('amber', qty)
-        elif event_type == 'stepped on':
+        elif event_type == 'stepped':
             if self.name == 'glass shard':    
                 if unit.char_pane.get_items_at_slot('feet'):
                     if unit.icon == '@':
@@ -185,6 +217,13 @@ class Item:
                     else:
                         unit.zone.add_message(f'{unit} cuts its foot on glass shards.')
                     unit.hp -= 2
+            elif self.name == 'stick':
+                unit.zone.add_message('You step on a dry stick, snapping it in half.')
+                unit.zone.emit_sound(unit.x, unit.y, 50)
+                self.destroyed = True
+            elif self.name == 'poison cloud':
+                unit.hp -= 1
+
 
     def affect_item(self, item):
         if item is self or self.destroyed or item.destroyed:
@@ -208,6 +247,7 @@ class Item:
             return
         self.broken = True
         self.pieces = []
+        # TODO create sound
         if cause == 'frozen': # only potions can do this
             item = Item('glass shard')
             item.temperature = self.temperature
@@ -225,8 +265,9 @@ class Item:
                 if content:
                     self.pieces.append(content)
         
+    @property
     def collectable(self):
-        return 'puddle' not in self.name
+        return 'puddle' not in self.name and 'poison cloud' not in self.name
 
     def fill(self, liquid, quantity=3):
         # don't replace liquid if item it already contains a different one
